@@ -1,7 +1,7 @@
 ---
 allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*)
 description: Create a conventional commit
-model: claude-haiku-4-5-20251001
+model: haiku
 ---
 
 Current changes: !`git status`
@@ -12,6 +12,7 @@ Create a single git commit following Conventional Commits specification.
 Format: <type>[optional scope]: <description>
 
 Choose the appropriate type:
+
 - feat: new feature
 - fix: bug fix
 - docs: documentation only
@@ -24,6 +25,7 @@ Choose the appropriate type:
 - chore: other changes
 
 Examples:
+
 - "feat: add user authentication"
 - "fix: prevent racing of requests"
 - "docs: correct spelling of CHANGELOG"
