@@ -1,0 +1,12 @@
+# Ignore everything by default
+*
+
+# Then explicitly include what we want to track
+!.gitignore
+!claude.md
+!commands/
+!commands/**
+!agents/
+!agents/**
+!skills/
+!skills/**
