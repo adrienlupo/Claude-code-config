@@ -1,7 +1,3 @@
-# General Style
-
-1. **Do not use emojis**
-
 # Code Quality Standards
 
 ## Core Principles (Priority Order)
@@ -28,6 +24,8 @@
 - DRY: Extract reusable logic immediately
 - Remove dead code on sight
 - Explicit error handling - no silent failures
+- **Always use absolute paths for imports** - never use relative paths
+- **No emojis** - in code, comments, or documentation
 
 ---
 
