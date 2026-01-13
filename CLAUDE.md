@@ -44,6 +44,34 @@
 
 ---
 
+# Parallel Work with Git Worktrees
+
+**When running multiple Claude Code sessions in parallel (e.g., multiple PRs):**
+
+- Always use git worktrees to isolate each task
+- Each worktree = separate branch + isolated file state = zero conflicts
+
+**Setup workflow:**
+```bash
+# Create worktree for each parallel task
+git worktree add ../project-feature-name -b feat/feature-name
+
+# Run Claude in the worktree
+cd ../project-feature-name && claude
+```
+
+**Cleanup after PR merged:**
+```bash
+git worktree remove ../project-feature-name
+```
+
+**Why not background tasks on same repo?**
+- Background processes share filesystem and git state
+- Simultaneous file edits and commits cause conflicts
+- Worktrees provide complete isolation
+
+---
+
 # Implementation Constraints
 
 - **No over-engineering**: Solve the current problem, not future hypotheticals
