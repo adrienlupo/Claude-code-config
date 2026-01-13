@@ -11,14 +11,14 @@ description: |
   - Provide a debrief after training or competition
   - Adjust their training plan based on feedback or circumstances
   - Understand where they are in their current training cycle
-  - Sync their Strava activities
+  - Check their recent activities or weekly summary
   
   Requires: Strava MCP connection for activity data.
-  Data is provided via project knowledge files (athlete-profile, training-plan, training-log, debriefs).
+  Data is provided via project knowledge files (athlete-profile, training-plan, competition-calendar, debriefs).
   
   Triggers on phrases like: "analyse ma sortie", "où j'en suis dans ma prépa", "prépare-moi pour [race]", 
   "debrief", "montre mon plan", "training plan", "analyze my run", "coach me", "plan d'entraînement",
-  "sync", "MAJ", "semaine"
+  "semaine", "this week", "last run", "my activities"
 ---
 
 # Trail Endurance Coach
@@ -27,17 +27,31 @@ Expert coaching skill for trail running preparation with periodized training, St
 
 ## Data Architecture
 
-This skill is **stateless**. All persistent data is stored in the **project knowledge** and provided in conversation context:
+This skill uses **direct Strava MCP queries** for activity data - no local activity log needed.
 
 | Data | Project File | Purpose |
 |------|--------------|---------|
 | Athlete profile | `athlete-profile.json` | Strava profile, HR/power zones, weight |
 | Competition calendar | `competition-calendar.json` | Main event + intermediate races |
 | Training plan | `training-plan.json` | Periodization cycles with status |
-| Training log | `training-log.json` | 3-month rolling activity history with analyses |
 | Debriefs | `debriefs.json` | User feedback patterns |
 
-**Workflow:** Read data from project knowledge → Process with Strava MCP → Return updated JSON for user to save.
+**Workflow:** Read plan/profile from project knowledge → Query Strava MCP for activities → Analyze and coach.
+
+## Strava MCP Usage
+
+Always query Strava directly instead of maintaining local activity logs:
+
+| Need | MCP Call |
+|------|----------|
+| Recent activities | `list_activities(limit=N)` |
+| This week | `list_activities(week_offset=0)` |
+| Last week | `list_activities(week_offset=-1)` |
+| Specific period | `list_activities(after="YYYY-MM-DD", before="YYYY-MM-DD")` |
+| Activity details | `get_activity_detail(activity_id)` |
+| Deep analysis | `get_activity_streams(activity_id)` |
+| Athlete zones | `get_athlete_zones()` |
+| Stats summary | `get_athlete_stats()` |
 
 ## Coaching Philosophy
 
@@ -57,37 +71,35 @@ All recommendations must be:
 
 ## Interaction Workflows
 
-### Sync / MAJ
-
-Fetch new Strava activities and generate coaching analyses.
-
-```
-1. Read training-log.json from context → get last_sync date
-2. list_activities(after=last_sync) OR list_activities(week_offset=0/-1)
-3. For each new Run/TrailRun:
-   a. get_activity_detail(id)
-   b. get_activity_streams(id) if deeper analysis needed
-   c. Generate coaching_analysis (see framework below)
-4. Return updated training-log.json for user to save
-```
-
-### Current Status ("où j'en suis", "my progress")
+### Current Status ("où j'en suis", "my progress", "semaine")
 
 ```
 1. Read training-plan.json → find current cycle by date
-2. Read training-log.json → current week stats
-3. Compare actual vs planned (volume, intensity, key sessions)
+2. list_activities(week_offset=0) → current week data
+3. Calculate actual vs planned (volume, intensity, key sessions)
 4. Present: cycle context, week progress, recommendations
 ```
 
-### Activity Analysis ("analyse ma sortie")
+### Activity Analysis ("analyse ma sortie", "analyze my run")
 
 ```
-1. Identify activity (latest or user-specified)
+1. Identify activity:
+   - If specified → use that ID
+   - If "last" → list_activities(limit=1)
+   - If "yesterday" → filter by date
 2. get_activity_detail(id) + get_activity_streams(id)
 3. Generate comprehensive coaching_analysis
 4. Ask for user's subjective feedback if notable session
-5. Return analysis (user adds to training-log.json)
+```
+
+### Weekly Review ("bilan semaine", "weekly review")
+
+```
+1. list_activities(week_offset=-1) for last week
+2. Aggregate: total km, D+, time, zone distribution
+3. Compare to cycle targets
+4. Identify key sessions completed vs planned
+5. Recommendations for current week
 ```
 
 ### Debrief Processing
@@ -103,14 +115,14 @@ Fetch new Strava activities and generate coaching analyses.
 5. If adaptation needed → return modified training-plan.json section
 ```
 
-### Plan Visualization ("montre mon plan", "semaine", "cycle X")
+### Plan Visualization ("montre mon plan", "cycle X")
 
 ```
 1. Read training-plan.json
 2. Format requested view:
    - Full plan: all cycles overview
    - Cycle X: detailed breakdown
-   - Semaine: day-by-day current week
+   - Current: this week day-by-day
 3. Include status, adaptations, key dates
 ```
 
@@ -123,8 +135,8 @@ When no project data exists:
 2. get_athlete_zones() → HR zones, power zones
 3. Ask: competition details (name, date, distance, D+)
 4. Calculate periodization (see references/periodization.md)
-5. list_activities(limit=30) → initial training context
-6. Return all JSON files for user to save to project
+5. list_activities(limit=30) → assess current fitness level
+6. Return JSON files for user to save to project
 ```
 
 ## Coaching Analysis Framework
