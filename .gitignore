@@ -10,6 +10,8 @@
 !agents/**
 !skills/
 !skills/**
+!notify.sh
+!settings.json
 
 # Ignore macOS system files
 .DS_Store
