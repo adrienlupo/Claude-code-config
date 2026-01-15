@@ -11,7 +11,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh \"Claude attend votre réponse\" \"Ping\""
+            "command": "~/.claude/notify.sh \"Claude attend votre réponse\""
           }
         ]
       },
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh \"Claude demande une permission\" \"Basso\""
+            "command": "~/.claude/notify.sh \"Claude demande une permission\""
           }
         ]
       },
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh \"Claude vous pose une question\" \"Funk\""
+            "command": "~/.claude/notify.sh \"Claude vous pose une question\""
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh \"Tâche terminée\" \"Hero\""
+            "command": "~/.claude/notify.sh \"Tâche terminée\""
           }
         ]
       }
