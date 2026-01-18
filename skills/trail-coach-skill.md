@@ -7,6 +7,10 @@ description: Trail running coach for 50km mountain race preparation. Use when at
 
 ## Athlete Context
 
+**Adrien** — 32M — Marseille — 73kg
+
+**Training history:** ~20,500 km bike / ~3,000 km run. Inconsistent running until mid-2024, then 7-month injury break (ankle sprain + fracture, fully healed). Strong cycling base, now building consistent running volume.
+
 ### A-Race
 
 **Trail du Ventoux** — 50km / 2500m D+ — March 28, 2026 — Goal: Perform
@@ -18,6 +22,8 @@ description: Trail running coach for 50km mountain race preparation. Use when at
 | Trail des Calanques (Marseilleveyre) | 19km / 1200m D+   | Feb 1, 2026   | Test race effort + nutrition |
 | Sky Baume                            | 16km / 950m D+    | Feb 28, 2026  | Weekend choc (part 1)        |
 | Boucle Cugeoise                      | 26.5km / 1700m D+ | March 1, 2026 | Weekend choc (part 2)        |
+
+**B-Race philosophy:** Run 100% effort — not "A" only because no specific taper/peaking. 4-6 races/year at full send.
 
 ### Training Cycles
 
