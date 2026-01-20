@@ -35,16 +35,17 @@ description: Trail running coach for 50km mountain race preparation. Use when at
 
 ### Athlete Zones & Benchmarks
 
-**VMA:** 18.5 km/h
+**Max HR:** 193 bpm
+**VMA:** 19 km/h
 
 **Heart Rate Zones:**
-| Zone | Range | Use |
-|------|-------|-----|
-| Z1 | 0–132 | Recovery |
-| Z2 | 132–147 | Endurance |
-| Z3 | 147–162 | Tempo |
-| Z4 | 162–177 | Threshold |
-| Z5 | 177+ | VO2max |
+| Zone | Range | % Max HR | Use |
+|------|-------|----------|-----|
+| Z1 | 0–132 | <68% | Recovery |
+| Z2 | 132–147 | 68–76% | Endurance |
+| Z3 | 147–162 | 76–84% | Tempo |
+| Z4 | 162–177 | 84–92% | Threshold |
+| Z5 | 177+ | >92% | VO2max |
 
 **Power Zones (bike):**
 | Zone | Range |
@@ -57,7 +58,7 @@ description: Trail running coach for 50km mountain race preparation. Use when at
 | Z6 | 327–408W |
 | Z7 | 409W+ |
 
-**Intensity approach:** Trail = HR. Road running = % VMA. Bike = Power.
+**Intensity approach:** Trail = HR (+ % max HR for context). Road running = % VMA. Bike = Power.
 
 ---
 
@@ -174,51 +175,127 @@ Detail in Notion ("Jambe A" / "Jambe B") — fetch via Notion MCP if needed.
 
 **On demand only** — when explicitly asked. No automatic analysis.
 
-### Analysis Framework
+### Analysis Funnel
 
-**1. Context First**
+Progress from broad to precise. Each level adds detail — stop when question is answered.
 
-- Where in cycle? (Week X of 3+1? Load or assimilation? Distance from A-race?)
-- Session goal? (Cross-reference Strava ↔ Calendar description)
-- Fit in week? (After hard day? Before rest? Key or filler?)
+```
+L1: Athlete Context (zones, race calendar)
+    ↓
+L2: Calendar Context (cycle, week, session goal)
+    ↓
+L3: Activity Summary → get_activity_detail
+    ↓
+L4: Deep Metrics → get_activity_streams
+    ↓
+L5: Historical Comparison → get_segment_effort_streams (on request)
+```
 
-**2. Execution vs. Plan**
+---
 
-- Compare Strava to calendar event
-- Done as intended? If deviation: justified?
+#### Level 1: Athlete Context
 
-**3. Core Elements**
-| Element | Check |
-|---------|-------|
-| **Manual laps** | Foundation — reveals structure. Always check first. |
-| **HR** | Time in zones, avg vs. target, drift. Per lap when relevant. |
-| **Pacing** | Consistency across laps, splits, went out too fast? |
-| **Vertical** | Climbing pace, D+ (trail sessions) |
-| **Athlete feedback** | Check Strava description — key if present |
-| **Power** | Bike only. Use power zones. |
+Pull from skill context (no tool needed):
 
-**4. Output**
+- **Max HR:** 193 bpm — use to contextualize efforts (% of max)
+- **VMA:** 19 km/h — road running intensity reference
+- HR zones, power zones
+- A-race date + distance to race
+- Current training phase expectations
 
-- Concise by default: key points, verdict, concerns
-- Deep dive on request only
+#### Level 2: Calendar Context
+
+**Tool:** Google Calendar MCP → "Sport" calendar
+
+- **Cycle position:** Week X of 3+1? Load or assimilation?
+- **Session goal:** Match calendar event description to activity
+- **Week position:** After hard day? Before rest? Key session or filler?
+
+#### Level 3: Activity Summary
+
+**Tool:** `get_activity_detail`
+
+Extract:
+
+| Data                 | Use                                             |
+| -------------------- | ----------------------------------------------- |
+| Avg HR / Max HR      | Zone compliance                                 |
+| Avg Power (bike)     | Intensity check                                 |
+| Distance / Elevation | Volume match                                    |
+| Manual laps          | Interval structure — **foundation of analysis** |
+| Segment efforts      | List PRs and notable segments                   |
+
+**Manual laps = primary structure indicator.** If present, analyze lap-by-lap consistency before anything else.
+
+#### Level 4: Deep Metrics
+
+**Tool:** `get_activity_streams`
+
+Analyze:
+
+| Metric             | What to Look For                                      |
+| ------------------ | ----------------------------------------------------- |
+| Time in zones      | Distribution across zones                             |
+| HR drift           | <5% good, 5-8% watch, >10% red flag                   |
+| Elevation profile  | Climbing pace, vertical distribution                  |
+| Pace/power per lap | Consistency, fade, negative split                     |
+| Cadence on descent | >180 spm = good, higher = better on technical terrain |
+
+**Determine session type from data:**
+
+| Type      | Signature                       |
+| --------- | ------------------------------- |
+| Recovery  | 90%+ Z1, flat HR                |
+| Endurance | 80%+ Z1-Z2, steady HR           |
+| Tempo     | Sustained Z3 blocks (40-60 min) |
+| Threshold | Z4 intervals (20-40 min total)  |
+| VO2max    | Z5 intervals (3-5 min efforts)  |
+| Anaerobic | Z5+ spikes (30s-2 min)          |
+
+Cross-check detected type vs. calendar intent.
+
+#### Level 5: Historical Segment Comparison
+
+**Tool:** `get_segment_effort_streams` — **on request only**
+
+Use when athlete asks about progress or mentions specific segment.
+
+**Analysis framework:**
+
+| Compare               | Good Sign    | Warning Sign         |
+| --------------------- | ------------ | -------------------- |
+| Same pace, lower HR   | Fitness gain | —                    |
+| Same HR, faster pace  | Fitness gain | —                    |
+| Same pace, higher HR  | —            | Fatigue / detraining |
+| PR with controlled HR | Peak fitness | —                    |
+| PR with max HR        | Good effort  | Check recovery       |
+
+**Key segments to track:**
+
+- "Piste Athlétisme Jean Bouin" — flat speed benchmark
+- Repeat climbs — vertical efficiency
+- Technical descents — eccentric strength
+
+---
 
 ### Quality Markers
 
-**Good:** Target zones matched, consistent laps, even/negative splits, HR drift <5%, finished controlled.
+**Good execution:** Target zones matched, consistent laps, even/negative splits, HR drift <5%, finished controlled.
 
-**Bad:** Wrong zones, fade/blow-up, HR drift >8-10%, couldn't complete.
+**Poor execution:** Wrong zones, fade/blow-up, HR drift >8-10%, couldn't complete, large lap variance.
 
 ### Red Flags
 
-**Acute:** HR drift >10%, high HR for pace, couldn't complete, large lap variance.
+| Type           | Indicators                                                                     |
+| -------------- | ------------------------------------------------------------------------------ |
+| Acute          | HR drift >10%, high HR for pace, couldn't complete, large lap variance         |
+| Chronic        | Declining performance at same HR, repeated missed sessions, persistent fatigue |
+| Trail-specific | Quad destruction post-descent, pace drop second half, GI issues                |
 
-**Chronic:** Declining performance at same HR/pace, repeated missed sessions, persistent fatigue, motivation drop.
+### Output Format
 
-**Trail-specific:** Quad destruction after moderate descents, pace drop in second half, GI issues.
-
-### Technical
-
-Always use `get_activity_streams` for detailed analysis. Cross-reference with Calendar.
+- **Default:** Concise — key findings, verdict, concerns (3-5 bullets max)
+- **Deep dive:** On request — full funnel with data tables
 
 ---
 
