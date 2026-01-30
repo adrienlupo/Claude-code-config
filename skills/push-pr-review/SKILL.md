@@ -1,45 +1,43 @@
 ---
 name: push-pr-review
-description: PR submission workflow that creates a pull request with clear context, then performs an unbiased code review. Use when: (1) user says "push PR", "submit PR", "create PR and review", (2) user wants to finalize changes and get them reviewed, (3) after completing a feature or fix and ready to submit. Chains PR creation, context clearing, and code review for objective feedback.
+description: PR submission workflow that creates a pull request with clear context, then performs an unbiased code review. Use when: (1) user says "push PR", "submit PR", "create PR and review", (2) user wants to finalize changes and get them reviewed, (3) after completing a feature or fix and ready to submit. Automates PR creation, then guides user through context clearing for objective review.
 ---
 
 # Push PR Review
 
-Submit a PR and get an unbiased code review in one workflow.
+Automated PR workflow with unbiased review.
 
-## Workflow
+## Phase 1: Create PR (Automated)
 
-Execute these steps in order:
+Execute these steps automatically:
 
-### 1. Create PR
+1. **Check git status** - Identify staged/unstaged changes
+2. **Ask user** which changes to include if mixed/unclear
+3. **Create feature branch** if on main/master
+4. **Stage and commit** the selected changes
+5. **Push to remote** with upstream tracking
+6. **Create PR** using `gh pr create` with this format:
 
-Create the pull request using `gh pr create`:
-
-**PR Description Format:**
 ```markdown
 ## Summary
-[Problem being solved OR feature being added - 1-2 sentences]
+[Derive from conversation: problem solved OR feature added - 1-2 sentences]
 
 ## Changes
-[Bullet list of what was implemented]
+[List from git diff: bullet points of what was implemented]
 ```
 
-- Derive summary from conversation context (the problem/feature discussed)
-- List actual changes from git diff
-- Use concise, clear language
+7. **Output the PR URL** and instruct user:
 
-### 2. Clear Context
+```
+PR created: <URL>
 
-Run `/clear` to reset the conversation. This ensures the review is objective and not biased by implementation discussion.
+For unbiased review, run:
+/clear
 
-### 3. Review PR
+Then:
+/review <URL>
+```
 
-Run `/review` on the newly created PR. The fresh context provides unbiased analysis.
+## Phase 2: Review (User-triggered)
 
-## Example Invocation
-
-User: "push pr and review"
-
-1. Create PR with summary + changes
-2. `/clear`
-3. `/review`
+After `/clear`, user runs `/review <PR-URL>` for objective code review with fresh context.
