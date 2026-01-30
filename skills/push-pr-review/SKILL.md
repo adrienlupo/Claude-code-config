@@ -18,13 +18,20 @@ Execute these steps automatically:
 5. **Push to remote** with upstream tracking
 6. **Create PR** using `gh pr create` with this format:
 
+**PR Description Format (Critical for Review Context):**
+
 ```markdown
-## Summary
-[Derive from conversation: problem solved OR feature added - 1-2 sentences]
+## Context
+[WHY this PR exists - the problem, bug, or feature request that triggered this work]
+
+## Solution
+[WHAT approach was taken to solve it - high-level explanation]
 
 ## Changes
-[List from git diff: bullet points of what was implemented]
+[HOW it was implemented - bullet list of specific changes]
 ```
+
+The Context section is crucial - it provides the reviewer with full understanding after `/clear` removes conversation history.
 
 7. **Output the PR URL** and instruct user:
 
@@ -40,4 +47,4 @@ Then:
 
 ## Phase 2: Review (User-triggered)
 
-After `/clear`, user runs `/review <PR-URL>` for objective code review with fresh context.
+After `/clear`, user runs `/review <PR-URL>`. The PR description provides all necessary context for objective code review.
