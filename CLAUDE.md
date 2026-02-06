@@ -52,6 +52,7 @@
 - Each worktree = separate branch + isolated file state = zero conflicts
 
 **Setup workflow:**
+
 ```bash
 # Create worktree for each parallel task
 git worktree add ../project-feature-name -b feat/feature-name
@@ -61,14 +62,16 @@ cd ../project-feature-name && claude
 ```
 
 **Cleanup after PR merged:**
+
 ```bash
 git worktree remove ../project-feature-name
 ```
 
-**Why not background tasks on same repo?**
-- Background processes share filesystem and git state
-- Simultaneous file edits and commits cause conflicts
-- Worktrees provide complete isolation
+---
+
+# GitHub / PR Workflows
+
+- When reviewing PRs, always use `gh` CLI commands (e.g., `gh pr view`, `gh pr diff`) rather than MCP GitHub tools or raw API calls, as org token permissions are unreliable.
 
 ---
 
@@ -76,5 +79,4 @@ git worktree remove ../project-feature-name
 
 - **No over-engineering**: Solve the current problem, not future hypotheticals
 - **No extra features**: Stick strictly to requirements
-- **No premature optimization**: Make it work, then make it fast (if needed)
 - **Consistent style**: Match existing codebase formatting
