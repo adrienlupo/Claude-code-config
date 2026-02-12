@@ -41,26 +41,6 @@
 - Implementing features with unfamiliar dependencies
 
 **Workflow**: Resolve library ID → Query docs → Implement
-
----
-
-# Parallel Work with Git Worktrees
-
-**When running multiple Claude Code sessions in parallel (e.g., multiple PRs):**
-
-- Always use git worktrees to isolate each task
-- Each worktree = separate branch + isolated file state = zero conflicts
-
-**Setup workflow:**
-
-```bash
-# Create worktree for each parallel task
-git worktree add ../project-feature-name -b feat/feature-name
-
-# Run Claude in the worktree
-cd ../project-feature-name && claude
-```
-
 **Cleanup after PR merged:**
 
 ```bash
@@ -72,6 +52,7 @@ git worktree remove ../project-feature-name
 # GitHub / PR Workflows
 
 - When reviewing PRs, always use `gh` CLI commands (e.g., `gh pr view`, `gh pr diff`) rather than MCP GitHub tools or raw API calls, as org token permissions are unreliable.
+- **Commit messages must be single-line** - never use multi-line `-m` arguments (breaks permission pattern matching)
 
 ---
 
