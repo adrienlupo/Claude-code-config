@@ -1,69 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
-    "deny": [
-      "Read(**/.env)",
-      "Read(**/.env.*)",
-      "Read(**/secrets/**)",
-      "Read(~/.ssh/**)",
-      "Read(~/.aws/**)",
-      "Read(~/.git-credentials)",
-      "Read(~/.npmrc)",
-      "Read(~/.netrc)",
-      "Read(~/.config/gh/hosts.yml)",
-      "Bash(curl *)",
-      "Bash(wget *)",
-      "Bash(/usr/bin/curl *)",
-      "Bash(/usr/bin/wget *)",
-      "Bash(nc *)",
-      "Bash(ncat *)",
-      "Bash(socat *)",
-      "Bash(security *)",
-      "Bash(gh auth token)",
-      "Bash(printenv)",
-      "Bash(printenv *)",
-      "Bash(env)",
-      "Bash(git show *:.env)",
-      "Bash(git show *:.env.*)",
-      "Bash(grep *.env*)",
-      "Bash(grep */.env*)",
-      "Bash(grep *secrets/*)",
-      "Bash(grep */.ssh/*)",
-      "Bash(grep */.aws/*)",
-      "Bash(grep *.git-credentials*)",
-      "Bash(grep *.npmrc*)",
-      "Bash(grep *.netrc*)",
-      "Bash(find */.env*)",
-      "Bash(find */.ssh/*)",
-      "Bash(find */.aws/*)",
-      "Bash(find *secrets/*)",
-      "Bash(find *.git-credentials*)",
-      "Bash(find *.npmrc*)",
-      "Bash(find *.netrc*)"
-    ],
-    "ask": [
-      "Bash(git push *)",
-      "Bash(git reset --hard *)",
-      "Bash(git clean *)",
-      "Bash(git branch -D *)",
-      "Bash(npm install *)",
-      "Bash(npm i *)",
-      "Bash(npm ci *)",
-      "Bash(npm publish *)",
-      "Bash(yarn add *)",
-      "Bash(yarn install *)",
-      "Bash(pnpm install *)",
-      "Bash(pnpm add *)",
-      "Bash(brew install *)",
-      "Bash(brew uninstall *)",
-      "Bash(docker run *)",
-      "Bash(docker build *)",
-      "Bash(gh pr merge *)",
-      "Bash(gh issue create *)",
-      "Bash(ssh *)",
-      "Bash(scp *)",
-      "Bash(sftp *)"
-    ],
     "allow": [
       "Bash(git *)",
       "Bash(gh *)",
@@ -78,7 +22,9 @@
       "Skill(*)",
       "Bash(ls *)",
       "Bash(find *)",
-      "Read(**)",
+      "Read(~/**)",
+      "Glob(~/**)",
+      "Grep(~/**)",
       "Bash(grep *)",
       "Bash(tree *)",
       "Bash(file *)",
@@ -186,15 +132,70 @@
       "mcp__chrome-devtools__performance_start_trace",
       "mcp__chrome-devtools__performance_stop_trace",
       "mcp__chrome-devtools__performance_analyze_insight"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.git-credentials)",
+      "Read(~/.npmrc)",
+      "Read(~/.netrc)",
+      "Read(~/.config/gh/hosts.yml)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(/usr/bin/curl *)",
+      "Bash(/usr/bin/wget *)",
+      "Bash(nc *)",
+      "Bash(ncat *)",
+      "Bash(socat *)",
+      "Bash(security *)",
+      "Bash(gh auth token)",
+      "Bash(printenv)",
+      "Bash(printenv *)",
+      "Bash(env)",
+      "Bash(git show *:.env)",
+      "Bash(git show *:.env.*)",
+      "Bash(grep *.env*)",
+      "Bash(grep */.env*)",
+      "Bash(grep *secrets/*)",
+      "Bash(grep */.ssh/*)",
+      "Bash(grep */.aws/*)",
+      "Bash(grep *.git-credentials*)",
+      "Bash(grep *.npmrc*)",
+      "Bash(grep *.netrc*)",
+      "Bash(find */.env*)",
+      "Bash(find */.ssh/*)",
+      "Bash(find */.aws/*)",
+      "Bash(find *secrets/*)",
+      "Bash(find *.git-credentials*)",
+      "Bash(find *.npmrc*)",
+      "Bash(find *.netrc*)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git branch -D *)",
+      "Bash(npm install *)",
+      "Bash(npm i *)",
+      "Bash(npm ci *)",
+      "Bash(npm publish *)",
+      "Bash(yarn add *)",
+      "Bash(yarn install *)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm add *)",
+      "Bash(brew install *)",
+      "Bash(brew uninstall *)",
+      "Bash(docker run *)",
+      "Bash(docker build *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh issue create *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(sftp *)"
     ]
-  },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
-  "teammateMode": "tmux",
-  "attribution": {
-    "commit": "",
-    "pr": ""
   },
   "hooks": {
     "Notification": [
@@ -224,6 +225,14 @@
             "command": "~/.claude/notify.sh \"Claude vous pose une question\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude-glance/hooks/hook.sh"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -232,6 +241,44 @@
           {
             "type": "command",
             "command": "~/.claude/notify.sh \"Tâche terminée\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude-glance/hooks/hook.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude-glance/hooks/hook.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude-glance/hooks/hook.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude-glance/hooks/hook.sh"
           }
         ]
       }
@@ -244,5 +291,6 @@
     "frontend-design@claude-plugins-official": true,
     "mcp-apps@mcp-apps": true
   },
-  "alwaysThinkingEnabled": true
+  "alwaysThinkingEnabled": true,
+  "teammateMode": "tmux"
 }
