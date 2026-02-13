@@ -53,7 +53,7 @@ git worktree remove ../project-feature-name
 
 - When reviewing PRs, always use `gh` CLI commands (e.g., `gh pr view`, `gh pr diff`) rather than MCP GitHub tools or raw API calls, as org token permissions are unreliable.
 - **Commit messages must be single-line** - never use multi-line `-m` arguments (breaks permission pattern matching)
-- **Never chain Bash commands with `&&`** - use separate Bash calls instead (compound commands bypass permission allow rules)
+- **Never chain or pipe Bash commands** (`&&`, `||`, `;`, `|`) - use separate Bash calls instead (compound commands bypass permission allow rules)
 
 ---
 
