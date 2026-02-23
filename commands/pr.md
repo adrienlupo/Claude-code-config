@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git:*), Bash(gh:*), AskUserQuestion
+allowed-tools: Bash(git:*), mcp__github__create_pull_request, AskUserQuestion
 description: Create branch, commit, push and open a PR with clear context
 ---
 
@@ -25,7 +25,7 @@ Create a pull request with a meaningful description that explains the WHY.
 
 4. **Push** with upstream tracking
 
-5. **Create PR** with `gh pr create`:
+5. **Create PR** with `mcp__github__create_pull_request`:
 
 **PR Description Format:**
 

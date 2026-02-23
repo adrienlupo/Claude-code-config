@@ -8,6 +8,8 @@
 !commands/**
 !agents/
 !agents/**
+!agent-memory/
+!agent-memory/**
 !skills/
 !skills/**
 !notify.sh
