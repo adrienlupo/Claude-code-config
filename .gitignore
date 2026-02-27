@@ -1,0 +1,19 @@
+# Ignore everything by default
+*
+
+# Then explicitly include what we want to track
+!.gitignore
+!claude.md
+!commands/
+!commands/**
+!agents/
+!agents/**
+!agent-memory/
+!agent-memory/**
+!skills/
+!skills/**
+!notify.sh
+!settings.json
+
+# Ignore macOS system files
+.DS_Store
