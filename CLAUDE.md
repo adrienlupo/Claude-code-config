@@ -1,3 +1,7 @@
+# Language
+
+- When writing in French, always include proper accents (e.g., é, è, ê, à, ù, ç, etc.)
+
 # Code Style
 
 - Always use absolute paths for imports - never relative paths
