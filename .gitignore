@@ -13,7 +13,7 @@
 !skills/
 !skills/**
 !notify.sh
-!settings.json
+!settings.local.json
 
 # Ignore macOS system files
 .DS_Store
