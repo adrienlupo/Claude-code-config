@@ -11,15 +11,14 @@
 
 # Tool Usage
 
-## GitHub MCP
-
-Always prefer GitHub MCP tools over `gh` CLI for GitHub operations (PRs, issues, repos, code search).
-Use `mcp__github__create_branch` + `mcp__github__push_files` instead of `git push` — the sandbox blocks writing to `.git/config`, which breaks push when Git LFS is enabled.
-
 ## Context7 MCP
 
 Always query Context7 before implementing with external libraries/frameworks:
 resolve-library-id -> query-docs -> Implement
+
+## GitHub
+
+Always prefer GitHub MCP tools (`mcp__github__*`) over `gh` CLI. The sandbox blocks Go TLS certificate verification, making `gh` unreliable. MCP tools work directly via the API without TLS issues.
 
 # Workflow
 
