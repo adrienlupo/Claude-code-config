@@ -1,0 +1,273 @@
+# Bootstrap VPS Hetzner - {{PROJECT_NAME}}
+
+Commandes a executer dans l'ordre. Ne pas sauter d'etape - chaque §N depend du §N-1.
+
+## §2.1 - Provisionner le VPS (console Hetzner, ~10 min)
+
+1. <https://console.hetzner.com/> -> *Add Server*.
+2. Location **{{HETZNER_LOCATION}}**, image **Debian 12**, type **CX23**.
+3. Cocher **Backups** (+20% = ~0.80 EUR/mo).
+4. Ajouter une cle SSH publique jetable (sera retiree apres §2.4).
+5. Noter l'IPv4 publique affichee. Reportez-la ci-dessous : `<VPS_IPV4>`.
+
+## §2.2 - OS + user deploy
+
+```bash
+ssh root@<VPS_IPV4>
+
+# Sur le VPS :
+apt update && apt full-upgrade -y
+
+apt install -y unattended-upgrades apt-listchanges
+dpkg-reconfigure -plow unattended-upgrades
+
+adduser --disabled-password deploy
+usermod -aG sudo deploy
+mkdir -p /home/deploy/.ssh
+chown -R deploy:deploy /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
+
+# Optionnel : passwordless sudo (utile si la skill admin a besoin d'editer .env)
+echo 'deploy ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/deploy
+chmod 440 /etc/sudoers.d/deploy
+
+# Durcissement SSH via drop-in lu AVANT 50-cloud-init.conf.
+# sshd retient la PREMIERE valeur trouvee et lit sshd_config.d/*.conf par ordre
+# alphanumerique : editer /etc/ssh/sshd_config (ou un 99-) serait ecrase par le
+# drop-in cloud-init qui repose PasswordAuthentication yes. D'ou le prefixe 00-.
+printf 'PermitRootLogin no\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\nX11Forwarding no\nMaxAuthTries 3\nAllowUsers deploy\n' > /etc/ssh/sshd_config.d/00-hardening.conf
+
+# Verifier la config EFFECTIVE (pas juste la syntaxe) avant de redemarrer :
+sshd -t && sshd -T | grep -E '^(permitrootlogin|passwordauthentication|allowusers)'
+# Doit afficher : permitrootlogin no / passwordauthentication no / allowusers deploy
+systemctl restart ssh
+```
+
+/!\ NE PAS fermer cette session root tant que l'acces Tailscale n'est pas valide en §2.4 :
+`deploy` n'a pas encore de cle, `root` vient d'etre desactive, et le mot de passe est coupe.
+Une nouvelle connexion echouerait jusqu'a ce que Tailscale SSH soit en place (filet : console Hetzner).
+
+## §2.3 - Docker + log rotation
+
+```bash
+# Toujours connecte en root sur le VPS :
+curl -fsSL https://get.docker.com | sh
+usermod -aG docker deploy
+
+tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+systemctl restart docker
+```
+
+## §2.4 - Tailscale
+
+Sur <https://login.tailscale.com/admin> :
+1. **Settings -> Auth keys** -> *Generate auth key* : reusable=false, ephemeral=false, tags=`tag:prod`. Copier la cle.
+2. **Settings -> OAuth clients** -> *Generate OAuth client* : scope **`Auth Keys: Write`** (l'action `tailscale/github-action@v4` mint un auth-key court a chaque run et a besoin de ce scope, cf. <https://tailscale.com/docs/integrations/github/github-action>), tag `tag:ci`. Noter `client_id` + `client_secret` (pour les secrets GitHub).
+3. **Access Controls** -> editer le JSON ACL :
+
+```jsonc
+{
+  "tagOwners": {
+    "tag:ci":   ["autogroup:admin"],
+    "tag:prod": ["autogroup:admin"]
+  },
+  "acls": [
+    { "action": "accept", "src": ["autogroup:admin"], "dst": ["*:*"] },
+    { "action": "accept", "src": ["tag:ci"], "dst": ["tag:prod:22"] }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src":    ["autogroup:admin", "tag:ci"],
+      "dst":    ["tag:prod"],
+      "users":  ["deploy"]
+    }
+  ]
+}
+```
+
+La regle `autogroup:admin` est INDISPENSABLE : sans elle, seul `tag:ci` peut joindre le VPS et TON acces humain `ssh deploy@{{VPS_HOSTNAME_TS}}` (verifie plus bas et en §2.4) serait refuse par Tailscale SSH. `tag:ci` reste limite au strict necessaire pour le pipeline.
+
+Puis sur le VPS :
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up --ssh --hostname={{VPS_HOSTNAME_TS}} --auth-key=tskey-auth-...
+```
+
+Verifier depuis ta machine (avec Tailscale lance localement) :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+# doit fonctionner sans demander de mot de passe ni de cle locale
+```
+
+Une fois OK, supprimer la cle SSH publique jetable de la console Hetzner.
+
+## §2.5 - DNS
+
+Chez ton registrar (OVH, Gandi, etc.) :
+
+1. Ajouter un record **A** : `{{PREVIEW_HOST}}` -> `<VPS_IPV4>`, TTL 300.
+2. **Pas de record AAAA** (sauf si tu actives IPv6 cote VPS plus tard).
+
+Verifier la propagation :
+
+```bash
+dig {{PREVIEW_HOST}} +short
+# doit renvoyer <VPS_IPV4>
+```
+
+## §2.6 - Hetzner Cloud Firewall
+
+Firewall **reseau** (en amont de la VM, gratuit, sans coupure). On n'utilise PAS `ufw` sur la VM : Docker bypass les regles iptables/ufw pour les ports qu'il publish, donc ufw n'apporterait pas la garantie qu'on cherche. Le Hetzner Cloud Firewall, lui, intercepte tout avant que les paquets atteignent la VM - y compris une eventuelle erreur de config compose qui exposerait un port.
+
+Dans la console Hetzner :
+
+1. <https://console.hetzner.com/> -> projet -> **Firewalls** (menu lateral) -> **Create Firewall**.
+2. Nom : `{{PROJECT_SLUG}}-public-web`.
+3. **Inbound rules** (tout le reste sera bloque par defaut) :
+
+| Description | Source | Protocole | Port |
+|---|---|---|---|
+| `HTTP (Caddy ACME + redirect)` | Any IPv4 + Any IPv6 | TCP | 80 |
+| `HTTPS (Caddy)` | Any IPv4 + Any IPv6 | TCP | 443 |
+| `Ping (debug, optionnel)` | Any IPv4 + Any IPv6 | ICMP | - |
+
+4. **Supprimer la regle TCP 22 pre-remplie par defaut** : SSH passe par Tailscale (tunnel WireGuard sortant), invisible au firewall inbound. Ouvrir :22 publiquement reintroduirait la surface d'attaque qu'on evite.
+
+5. **Outbound rules** : laisser vide -> tout autorise en sortie. Caddy/Let's Encrypt, GHCR, Tailscale DERP, `unattended-upgrades` ont tous besoin de sortir.
+
+6. **Apply to** : selectionner `{{VPS_HOSTNAME_TS}}` -> **Create Firewall**. Application instantanee, sans coupure.
+
+Verifier (depuis l'exterieur, hors tailnet - ex. partage 4G) :
+
+```bash
+nc -zvw3 <VPS_IPV4> 22         # doit TIMEOUT (firewall bloque)
+nc -zvw3 <VPS_IPV4> 5432       # doit TIMEOUT
+curl -I https://{{PREVIEW_HOST}}  # doit repondre 200 (apres §2.10)
+```
+
+Et SSH via Tailscale doit toujours fonctionner :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}} 'echo ok'
+```
+
+### Alternative : provider SANS firewall reseau (OVH, bare VPS)
+
+Pas de Cloud Firewall upstream ? Utiliser un firewall HOTE nftables. Attention : Docker
+contourne nftables pour les ports qu'il publie (DNAT/FORWARD avant INPUT) - le firewall hote
+ne protege donc QUE les ports non-Docker et n'est PAS un substitut au binding correct.
+Garder les deux : nftables (services hote, ex. rien d'expose hors 80/443) + binding 127.0.0.1
+ou 100.x pour tout port Docker prive (cf. "Security invariants").
+
+`/etc/nftables.conf` (puis `sudo systemctl enable --now nftables`) :
+
+```nft
+#!/usr/sbin/nft -f
+flush ruleset
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iif "lo" accept
+    ct state invalid drop
+    ct state established,related accept
+    iifname "tailscale0" accept    # iifname (par NOM), PAS iif : iif echoue au boot
+    tcp dport { 80, 443 } accept   # seul trafic public
+    ip protocol icmp accept
+    ip6 nexthdr ipv6-icmp accept
+  }
+  chain forward { type filter hook forward priority 0; policy drop; }
+  chain output  { type filter hook output  priority 0; policy accept; }
+}
+```
+
+Valider la persistance par un VRAI reboot puis `sudo systemctl is-active nftables` (doit etre
+`active`) : `iif "tailscale0"` echouerait silencieusement au boot ("Interface does not exist")
+car nftables demarre avant tailscaled. Tester aussi `nc -zvw3 <VPS_IPV4> 22` depuis l'exterieur
+(doit TIMEOUT).
+
+## §2.7 - Push des fichiers infra sur le VPS
+
+Depuis ta machine, dans le repo :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}} 'sudo mkdir -p /opt/{{PROJECT_SLUG}} && sudo chown -R deploy:deploy /opt/{{PROJECT_SLUG}}'
+scp deploy/docker-compose.yml deploy/Caddyfile deploy@{{VPS_HOSTNAME_TS}}:/opt/{{PROJECT_SLUG}}/
+```
+
+## §2.8 - Creer /opt/{{PROJECT_SLUG}}/.env
+
+Sur le VPS via `ssh deploy@{{VPS_HOSTNAME_TS}}`. Generer les secrets :
+
+```bash
+cd /opt/{{PROJECT_SLUG}}
+
+{{#if HAS_DB}}
+# Postgres password : alphanum strict (pas de /, +, =)
+POSTGRES_PASSWORD=$(openssl rand -base64 64 | tr -dc 'A-Za-z0-9' | head -c 32)
+{{/if HAS_DB}}
+AUTH_SECRET=$(openssl rand -base64 32)
+{{#if HAS_ADMIN_BOOTSTRAP}}
+ADMIN_PASSWORD=$(openssl rand -base64 64 | tr -dc 'A-Za-z0-9' | head -c 24)
+{{/if HAS_ADMIN_BOOTSTRAP}}
+
+# Coller ensuite dans /opt/{{PROJECT_SLUG}}/.env (le template a ete imprime par /sysadmin) :
+nano .env
+chmod 600 .env
+```
+
+Stocker {{#if HAS_DB}}`POSTGRES_PASSWORD`, {{/if HAS_DB}}`AUTH_SECRET`{{#if HAS_ADMIN_BOOTSTRAP}}, `ADMIN_PASSWORD`{{/if HAS_ADMIN_BOOTSTRAP}} dans le password manager.
+
+## §2.9 - Secrets GitHub
+
+<https://github.com/{{GITHUB_OWNER}}/{{GITHUB_REPO}}/settings/secrets/actions> -> *New repository secret* :
+
+| Nom | Valeur |
+|---|---|
+| `TS_OAUTH_CLIENT_ID` | client_id de l'OAuth Tailscale (§2.4) |
+| `TS_OAUTH_SECRET` | client_secret de l'OAuth Tailscale (§2.4) |
+| `SSH_HOST` | `{{VPS_HOSTNAME_TS}}` |
+| `SSH_USER` | `deploy` |
+
+## §2.10 - Premier deploiement
+
+1. **GHCR reste PRIVE** (ne PAS rendre l'image publique : les couches Docker exposent le code source et, frequemment, des secrets baked-in). Authentifier le VPS en LECTURE seule pour le `docker compose pull` :
+   - GitHub -> *Settings* -> *Developer settings* -> *Fine-grained personal access tokens* : generer un token avec **uniquement** `read:packages` (idealement restreint a ce package). Stocker dans le password manager.
+   - Sur le VPS (`ssh deploy@{{VPS_HOSTNAME_TS}}`) :
+     ```bash
+     echo 'TOKEN_READ_PACKAGES' | docker login ghcr.io -u {{GITHUB_OWNER}} --password-stdin
+     chmod 600 ~/.docker/config.json
+     ```
+   - Le push CI utilise le `GITHUB_TOKEN` automatique (`packages: write`) : rien a configurer cote build. Ne JAMAIS poser un token d'ecriture sur le VPS.
+
+2. **Push sur main** -> GHA build, push GHCR, {{#if HAS_DB}}migre via tunnel SSH, {{/if HAS_DB}}swap APP_IMAGE, `docker compose up -d`.
+
+3. **Surveiller** : <https://github.com/{{GITHUB_OWNER}}/{{GITHUB_REPO}}/actions>
+
+4. **Verifier** :
+
+```bash
+curl -I https://{{PREVIEW_HOST}}
+# doit renvoyer HTTP/2 200 avec un cert Let's Encrypt valide (~30s apres le up -d initial)
+
+ssh deploy@{{VPS_HOSTNAME_TS}}
+docker compose ps
+# tous services "running"{{#if HAS_DB}}, db "healthy"{{/if HAS_DB}}
+
+docker compose logs --since 2m caddy | grep -iE "obtain|certificate"
+# voir l'obtention du cert LE
+```
+
+## §2.11 - Checklist production-like
+
+Cocher dans `specs/deploy-hetzner.md` au fur et a mesure. La liste exhaustive est dans la spec §2.11.
+
+## §2.12 - Runbook
+
+`deploy/README.md` a deja ete genere par /sysadmin. Le mettre a jour des qu'une procedure change.

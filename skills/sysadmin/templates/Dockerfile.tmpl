@@ -1,0 +1,33 @@
+FROM node:22-alpine AS builder
+RUN apk add --no-cache libc6-compat && corepack enable
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+{{#if HAS_DB}}
+COPY prisma ./prisma
+{{/if HAS_DB}}
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+
+FROM node:22-alpine AS runner
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+RUN adduser -D -u 1001 nextjs
+
+COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/public ./public
+
+RUN mkdir -p /app/data/uploads && chown -R nextjs:nextjs /app/data
+
+ENV UPLOADS_DIR=/app/data/uploads
+
+USER nextjs
+EXPOSE 3000
+
+CMD ["node", "server.js"]

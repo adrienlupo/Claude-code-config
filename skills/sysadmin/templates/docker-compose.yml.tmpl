@@ -1,0 +1,65 @@
+services:
+{{#if HAS_DB}}
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Bind to host loopback only so the GHA runner can reach Postgres via SSH
+    # tunnel (`ssh -L 5433:127.0.0.1:5432`) for `prisma migrate deploy`. The
+    # 127.0.0.1 bind is what keeps this off the public IP - NOT the firewall:
+    # Docker bypasses host nftables for published ports (DNAT before INPUT), so
+    # NEVER publish this on 0.0.0.0. (cf. SKILL.md "Security invariants")
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    mem_limit: 384m
+
+{{/if HAS_DB}}
+  app:
+    image: ${APP_IMAGE:-{{IMAGE_REF}}:latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    volumes:
+      - uploads:/app/data/uploads
+{{#if HAS_DB}}
+    depends_on:
+      db:
+        condition: service_healthy
+{{/if HAS_DB}}
+    mem_limit: 768m
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    mem_limit: 96m
+
+volumes:
+{{#if HAS_DB}}
+  pgdata:
+{{/if HAS_DB}}
+  uploads:
+  caddy_data:
+  caddy_config:

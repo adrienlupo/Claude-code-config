@@ -1,0 +1,330 @@
+# Runbook - Deploiement {{PROJECT_NAME}}
+
+Memo operationnel pour la stack Hetzner (preview = prod). Pour les decisions d'architecture, voir [`specs/deploy-hetzner.md`](../specs/deploy-hetzner.md).
+
+## Architecture
+
+```
+{{#if HAS_DB}}
+Internet --> Caddy :80/:443 (TLS auto Let's Encrypt) --> Next.js :3000 --> Postgres :5432
+                                                              |
+                                                              +--> volume "uploads" (/app/data/uploads)
+{{/if HAS_DB}}
+{{#if !HAS_DB}}
+Internet --> Caddy :80/:443 (TLS auto Let's Encrypt) --> Next.js :3000
+                                                              |
+                                                              +--> volume "uploads" (/app/data/uploads)
+{{/if !HAS_DB}}
+```
+
+- VPS : Hetzner Cloud CX23 ({{HETZNER_LOCATION}}), Debian 12, 2 vCPU, 4 GB RAM.
+{{#if HAS_DB}}
+- 3 services Docker : `db` (Postgres 17), `app` (Next.js standalone), `caddy` (reverse proxy + TLS).
+- Volumes persistants : `pgdata`, `uploads`, `caddy_data`, `caddy_config`.
+- Postgres bind sur `127.0.0.1:5432` du host (loopback) pour permettre au runner GHA de tunneler via SSH (`prisma migrate deploy`).
+{{/if HAS_DB}}
+{{#if !HAS_DB}}
+- 2 services Docker : `app` (Next.js standalone), `caddy` (reverse proxy + TLS).
+- Volumes persistants : `uploads`, `caddy_data`, `caddy_config`.
+{{/if !HAS_DB}}
+- Aucun port public hors :80/:443 - applique au niveau reseau par le **Hetzner Cloud Firewall** `{{PROJECT_SLUG}}-public-web` (cf. § Modifier le firewall). SSH uniquement via Tailscale.
+
+## Acces
+
+| Quoi | Comment |
+|---|---|
+| Rejoindre le tailnet | `tailscale up` |
+| SSH | `ssh deploy@{{VPS_HOSTNAME_TS}}` (resolution Tailscale, pas de cle locale) |
+| Console VPS de secours | [console.hetzner.com](https://console.hetzner.com/) -> server `{{VPS_HOSTNAME_TS}}` -> "Console" |
+| Fichiers d'infra | `/opt/{{PROJECT_SLUG}}/` (owned par `deploy`) : `docker-compose.yml`, `Caddyfile`, `.env` (chmod 600) |
+| Secrets app | Password manager partage |
+| Secrets GitHub Actions | repo Settings -> Secrets : `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `SSH_HOST`, `SSH_USER` |
+| Tailscale ACL + OAuth client | [admin Tailscale](https://login.tailscale.com/admin) |
+| Registrar DNS | a remplir |
+| Image runtime | `{{IMAGE_REF}}` |
+
+## Variables d'env critiques pour le SEO
+
+Le code app distingue prod / preview a partir d'une seule variable, lue runtime cote serveur.
+
+| Var | Effet | Valeur preview | Valeur prod |
+|---|---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | Source de verite pour `app/robots.ts`, `app/sitemap.ts`, canonical, OG, JSON-LD, et le bloc `redirects()` de `next.config.ts` | `https://{{PREVIEW_HOST}}` | `https://{{DOMAIN_APEX}}` |
+
+Comportement selon la valeur :
+
+- **Si != `PRODUCTION_URL`** (preview, dev, CI) : `robots.txt` sert `Disallow: /`, `sitemap.xml` est vide, redirects 301 desactives, canonical pointe vers le hostname preview. Empeche Google d'indexer le preview comme duplicate content.
+- **Si == `PRODUCTION_URL`** : `robots.txt` autorise l'indexation, sitemap rempli, redirects 301 actifs, canonical pointe vers le domaine prod.
+
+**Important** : la valeur doit etre EXACTEMENT `https://{{DOMAIN_APEX}}` (pas de slash final, pas de `www`). Toute divergence est traitee comme "pas en prod" et bloque l'indexation.
+
+Apres edit dans `.env` : `docker compose up -d app` suffit (la var est lue runtime, pas inlined au build, donc pas besoin de rebuild d'image).
+
+## Commandes courantes
+
+Toutes depuis `ssh deploy@{{VPS_HOSTNAME_TS}}`, dans `/opt/{{PROJECT_SLUG}}` :
+
+```bash
+docker compose ps                          # etat des services
+docker compose logs -f app                 # logs Next.js (Ctrl-C pour quitter)
+docker compose logs -f caddy               # logs Caddy (cert LE, requetes)
+docker compose logs --since 10m            # 10 dernieres minutes, tous services
+docker compose exec app sh                 # shell dans le container app
+{{#if HAS_DB}}
+docker compose exec db psql -U {{PROJECT_SLUG}} -d {{PROJECT_SLUG}}  # shell psql
+{{/if HAS_DB}}
+docker compose restart app                 # redemarre sans rebuild
+docker stats --no-stream                   # un snapshot CPU/RAM
+df -h /                                    # espace disque host
+```
+
+## Procedures
+
+### Deployer (chemin nominal)
+
+Push sur `main` -> GitHub Actions enchaine :
+1. `build-and-push` : lint, tsc, build image, tag `:latest` + `:sha-<SHA>`, push GHCR.
+{{#if HAS_DB}}
+2. `deploy` : checkout repo + `pnpm install`, join tailnet via OAuth, ouvre tunnel SSH `5433:127.0.0.1:5432`, `pnpm exec prisma migrate deploy`, ferme tunnel, SSH classique pour swap `APP_IMAGE` dans `/opt/{{PROJECT_SLUG}}/.env` + `docker compose pull app` + `docker compose up -d`.
+{{/if HAS_DB}}
+{{#if !HAS_DB}}
+2. `deploy` : join tailnet via OAuth, SSH classique pour swap `APP_IMAGE` dans `/opt/{{PROJECT_SLUG}}/.env` + `docker compose pull app` + `docker compose up -d`.
+{{/if !HAS_DB}}
+
+Aucune action manuelle. Surveiller via [Actions](https://github.com/{{GITHUB_OWNER}}/{{GITHUB_REPO}}/actions).
+
+### Deployer manuellement (si GHA indisponible)
+
+```bash
+{{#if HAS_DB}}
+# 1. Migrate via tunnel SSH (depuis ta machine, pas le VPS)
+ssh -f -N -L 5433:127.0.0.1:5432 deploy@{{VPS_HOSTNAME_TS}}
+PG=$(ssh deploy@{{VPS_HOSTNAME_TS}} 'grep ^POSTGRES_PASSWORD= /opt/{{PROJECT_SLUG}}/.env | cut -d= -f2-')
+DATABASE_URL="postgresql://{{PROJECT_SLUG}}:$PG@127.0.0.1:5433/{{PROJECT_SLUG}}" pnpm exec prisma migrate deploy
+pkill -f 'ssh -f -N -L 5433'
+
+# 2. Sur le VPS : editer APP_IMAGE et up -d
+{{/if HAS_DB}}
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+sed -i "s|^APP_IMAGE=.*|APP_IMAGE={{IMAGE_REF}}:sha-<SHA>|" .env
+docker compose pull app
+docker compose up -d
+```
+
+### Rollback
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+grep APP_IMAGE .env                                          # voir le SHA actuel
+sed -i "s|^APP_IMAGE=.*|APP_IMAGE={{IMAGE_REF}}:sha-<PREV_SHA>|" .env
+docker compose up -d app
+```
+
+Site retabli en < 30 s.{{#if HAS_DB}} Attention : `prisma migrate deploy` ne sait pas rollback les migrations. Si la derniere migration a un schema non-retrocompatible avec le SHA precedent, l'app va tomber. Pour eviter : suivre la regle expand/contract.{{/if HAS_DB}}
+{{#if HAS_ADMIN_BOOTSTRAP}}
+
+### Changer le mot de passe admin
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+sudo nano .env       # editer ADMIN_PASSWORD
+docker compose restart app
+```
+
+`instrumentation.ts` re-upsert l'admin au boot : le hash bcrypt est regenere, l'ancien password ne fonctionne plus. Mettre a jour le password manager dans la foulee.
+{{/if HAS_ADMIN_BOOTSTRAP}}
+
+### Modifier le Caddyfile ou docker-compose.yml
+
+Le workflow GHA ne re-pousse **pas** ces fichiers. Toute modif locale doit etre propagee a la main :
+
+```bash
+# Depuis ta machine
+scp deploy/docker-compose.yml deploy/Caddyfile deploy@{{VPS_HOSTNAME_TS}}:/opt/{{PROJECT_SLUG}}/
+
+# Puis sur le VPS
+ssh deploy@{{VPS_HOSTNAME_TS}} 'cd /opt/{{PROJECT_SLUG}} && docker compose up -d'
+```
+
+Pour un changement Caddy uniquement, `docker compose restart caddy` suffit.
+
+### Mise a jour OS
+
+`unattended-upgrades` applique les patches de securite Debian quotidiennement. La plupart sont actifs immediatement ; seuls le kernel et quelques libs critiques (`glibc`, `openssl`) necessitent un reboot pour prendre effet (le code qui tourne en memoire garde l'ancienne version sinon). Reboot manuel **uniquement quand c'est requis** - Debian le signale via `/var/run/reboot-required`.
+
+Verifier l'etat (a faire periodiquement, p. ex. a chaque connexion) :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+
+# 1. Un reboot est-il requis ? (kernel ou lib critique patchee)
+ls /var/run/reboot-required && cat /var/run/reboot-required.pkgs
+#   present -> reboot necessaire ; absent -> rien a faire
+
+# 2. Quels paquets de securite sont en attente / ont ete installes ?
+sudo unattended-upgrades --dry-run --debug 2>&1 | grep -iE "Allowed|will be upgraded"  # ce que le robot va appliquer seul
+apt list --upgradable 2>/dev/null | grep -i security                                   # tout ce qui existe en securite, robot ou pas
+```
+
+Les deux lignes repondent a des questions differentes, et c'est l'**ecart** entre elles qui signale un trou : la 1re liste ce qu'`unattended-upgrades` installera de lui-meme a sa prochaine passe ; la 2de liste toutes les MAJ de securite disponibles. Le demon saute les paquets *held*, les *phased updates* et tout ce qui sort de ses Allowed-Origins -- si la 2de montre un patch que la 1re n'applique pas, c'est a traiter a la main.
+
+Rebooter seulement si `/var/run/reboot-required` existe :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+sudo reboot
+# Attendre ~30 s, reconnect, verifier
+ssh deploy@{{VPS_HOSTNAME_TS}}
+docker compose ps    # tous "running"{{#if HAS_DB}} + db "healthy"{{/if HAS_DB}}
+curl -I https://{{PREVIEW_HOST}}   # 200 OK
+```
+
+> Reboot **automatique** non active : sans monitoring d'uptime, une panne au boot passerait inapercue. A reconsiderer une fois un monitoring en place (alors : `Unattended-Upgrade::Automatic-Reboot "true";` + `Automatic-Reboot-Time "04:00";` dans `/etc/apt/apt.conf.d/`).
+
+### Modifier le firewall (Hetzner Cloud Firewall)
+
+Le firewall `{{PROJECT_SLUG}}-public-web` est gere dans la console Hetzner - il vit hors du repo. Pour ajouter/retirer une regle :
+
+1. <https://console.hetzner.com/> -> projet -> **Firewalls** -> `{{PROJECT_SLUG}}-public-web` -> onglet **Rules**.
+2. Modifier les inbound rules (outbound reste **Allow all** - Caddy / Let's Encrypt / GHCR / Tailscale DERP / `unattended-upgrades` ont tous besoin de sortir).
+3. Sauvegarder : applique instantanement, sans coupure (firewall en amont de la VM).
+
+Regles inbound nominales :
+
+| Source | Proto | Port | Raison |
+|---|---|---|---|
+| `0.0.0.0/0`, `::/0` | TCP | 80 | HTTP (Caddy ACME + redirect 308) |
+| `0.0.0.0/0`, `::/0` | TCP | 443 | HTTPS (Caddy) |
+| `0.0.0.0/0`, `::/0` | ICMP | - | Ping debug (optionnel) |
+
+**Ne pas ajouter de regle pour :22** : SSH passe par Tailscale (tunnel WireGuard sortant), invisible au firewall inbound. Ouvrir :22 publiquement reintroduirait la surface d'attaque qu'on evite.
+
+**Pas de UFW sur la VM** : Docker bypass les regles UFW pour les ports qu'il publish (`ports:` en compose, cf. <https://github.com/moby/moby/issues/4737>). Le firewall reseau Hetzner, lui, est en amont de Docker - il intercepte tout, y compris une eventuelle erreur de config compose qui exposerait un port. C'est pour ca qu'il est la seule couche firewall active.
+
+Verifier apres modif :
+
+```bash
+# Depuis l'exterieur (machine hors tailnet, ex. partage 4G)
+curl -I https://{{PREVIEW_HOST}}                       # 200
+nc -zvw3 <VPS_IPV4> 22                                 # TIMEOUT
+nc -zvw3 <VPS_IPV4> 5432                               # TIMEOUT
+
+# SSH via Tailscale toujours up
+ssh deploy@{{VPS_HOSTNAME_TS}} 'echo ok'
+```
+
+### Migration DNS d'un domaine existant vers ce VPS (go-live SEO-safe)
+
+A utiliser quand un site existant tourne ailleurs (ex. WordPress chez un autre hebergeur, qui ranke deja sur Google) et que tu veux basculer son trafic sur ce VPS sans perdre le ranking. Procedure complete : voir `specs/seo-migration.md` (genere par /sysadmin si demande).
+
+Vue d'ensemble (timing critique sur les 30 minutes du go-live) :
+
+| Quand | Action | Cote |
+|---|---|---|
+| **J-7 a J-1** | Ranking baseline GSC, mapping URLs legacy -> nouvelles, prep redirects 301 dans `next.config.ts` | App / GSC |
+| **J-1** | TTL DNS legacy abaisse a 60s + extension `SITE_ADDRESS` du VPS pour cohabiter `{{PREVIEW_HOST}}, {{DOMAIN_APEX}}, www.{{DOMAIN_APEX}}` (`.env` + `docker compose up -d caddy`) | DNS + VPS |
+| **J0 (ordre strict)** | (1) `NEXT_PUBLIC_SITE_URL=https://{{DOMAIN_APEX}}` dans `.env` + `docker compose up -d app` -> (2) bascule DNS A racine vers IP VPS chez le registrar -> (3) si TLS echoue : `docker compose restart caddy` (cf. troubleshooting "Cert LE en backoff post-bascule DNS") | VPS + DNS |
+| **J0 + 30 min** | Decommissionner sous-domaine preview : retirer de `SITE_ADDRESS`, `docker compose up -d caddy`, puis supprimer le record DNS `{{PREVIEW_HOST}}` | VPS + DNS |
+| **J0 + 1h** | GSC : soumettre `https://{{DOMAIN_APEX}}/sitemap.xml`, demander indexation des URLs principales | GSC |
+| **J+7** | Restaurer TTL DNS a 3600s, resilier l'ancien hebergement | DNS + Registrar |
+
+Detail des commandes a passer sur le VPS au J0 (les autres etapes sont DNS/GSC/registrar) :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+sudo nano .env
+# Modifier :
+#   NEXT_PUBLIC_SITE_URL=https://{{PREVIEW_HOST}}   ->  NEXT_PUBLIC_SITE_URL=https://{{DOMAIN_APEX}}
+docker compose up -d app
+
+# Sanity check : preview doit maintenant servir Allow: / (preuve que la nouvelle env est chargee)
+curl -s https://{{PREVIEW_HOST}}/robots.txt | head -3
+```
+
+Apres la bascule DNS chez le registrar, depuis ta machine :
+
+```bash
+# Propagation
+for r in "" "@1.1.1.1" "@8.8.8.8"; do dig $r {{DOMAIN_APEX}} +short; done
+# Doit retourner l'IP du VPS sur les 3 resolveurs
+
+# Si HTTPS echoue avec "tlsv1 alert internal error" : Caddy en backoff (cf. troubleshooting)
+
+# Sinon, verifier la prod
+curl -I https://{{DOMAIN_APEX}}/
+echo | openssl s_client -servername {{DOMAIN_APEX}} -connect {{DOMAIN_APEX}}:443 2>/dev/null | openssl x509 -noout -subject -issuer -dates
+curl -ILs https://{{DOMAIN_APEX}}/<ancienne-url-WP>/ | grep -iE "^(HTTP|location:)"  # 308 -> nouvelle URL
+curl -s https://{{DOMAIN_APEX}}/robots.txt
+curl -s https://{{DOMAIN_APEX}}/sitemap.xml
+```
+
+Decommissionnement preview (ordre strict, sinon Caddy spamme des erreurs de cert pour un host injoignable) :
+
+```bash
+# 1. VPS : retirer preview de SITE_ADDRESS
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+sudo nano .env
+# SITE_ADDRESS=... -> SITE_ADDRESS={{DOMAIN_APEX}}, www.{{DOMAIN_APEX}}
+docker compose up -d caddy
+
+# 2. Registrar : supprimer le record A {{PREVIEW_HOST}}
+
+# 3. Verifier
+dig {{PREVIEW_HOST}} +short   # vide
+curl -sI -m 8 https://{{PREVIEW_HOST}}/  # timeout / cert refused
+```
+
+### Restore depuis backup Hetzner
+
+1. [console.hetzner.com](https://console.hetzner.com/) -> projet -> server `{{VPS_HOSTNAME_TS}}` -> tab **Backups**.
+2. Selectionner le snapshot souhaite -> **Restore** (overwrite serveur courant) ou **Create image from backup** puis nouveau serveur (mode test).
+3. Au reboot apres restore : verifier `docker compose ps`, login admin, et que le cert LE est toujours valide (sinon Caddy le re-demandera automatiquement).
+4. Si l'IP a change (mode "nouveau serveur"), mettre a jour le record DNS A `{{PREVIEW_HOST}}` avant le test cert LE.
+
+### Purge logs / disque plein
+
+Rotation Docker deja active (10 MB x 3 par container). En dernier recours :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+df -h /                                  # mesurer
+docker system df                         # ce qui consomme cote Docker
+docker image prune -af                   # supprime les images sans tag
+# JAMAIS docker system prune -af --volumes : tuerait{{#if HAS_DB}} pgdata,{{/if HAS_DB}} uploads, caddy_data
+```
+
+## Troubleshooting
+
+| Symptome | Premier reflexe |
+|---|---|
+| Site down (`curl -I` timeout) | `docker compose ps` -> service down ? Logs : `docker compose logs --since 5m app caddy`. Si tout est `running` mais `curl` timeout depuis l'exterieur, verifier que le firewall `{{PROJECT_SLUG}}-public-web` est bien attache au VPS (console Hetzner -> Firewalls -> Resources). |
+| Cert LE qui boucle | `docker compose logs caddy \| grep -i "challenge\|error"`. Causes typiques : DNS pas propage (`dig {{PREVIEW_HOST}} +short` doit renvoyer l'IP du VPS), ou port 80 non joignable (`curl -I http://{{PREVIEW_HOST}}` doit renvoyer 308). |
+| **Cert LE en backoff post-bascule DNS** (TLS handshake echoue avec `tlsv1 alert internal error` apres avoir bascule un domaine) | Caddy a tente l'emission du cert avant la bascule (cohabitation J-1) -> challenge HTTP-01 echoue parce que DNS pointait ailleurs -> Caddy en **backoff exponentiel** et NE retentera pas spontanement, meme si DNS est OK maintenant. Solution : `docker compose restart caddy` puis `docker compose logs --since 1m caddy \| grep -E "obtain\|certificate"` -> doit voir `certificate obtained successfully` en ~15s. Si l'apex `/.well-known/acme-challenge/test` repond `308 -> HTTPS` au lieu de 404, c'est le symptome confirme du backoff. |
+| Robots/sitemap servis en mode preview sur le domaine prod (Disallow: /, sitemap vide) | `NEXT_PUBLIC_SITE_URL` pas a jour dans `/opt/{{PROJECT_SLUG}}/.env`. Doit etre exactement `https://{{DOMAIN_APEX}}` (sans slash final). Apres edit : `docker compose up -d app` (recharge l'env, pas besoin de rebuild). Verifier : `curl -s https://{{DOMAIN_APEX}}/robots.txt` doit retourner `Allow: /` + ligne `Sitemap:`. |
+| Redirects 301 desactives (anciennes URLs WP retournent 404) | Idem : `NEXT_PUBLIC_SITE_URL` doit etre exactement la valeur de `PRODUCTION_URL` dans `next.config.ts` pour que le bloc `redirects()` retourne le mapping. En preview, c'est volontairement desactive. |
+{{#if HAS_DB}}
+| `db` unhealthy | `docker compose logs db`. Si "PANIC: could not locate" -> volume `pgdata` corrompu (rare) -> restore Hetzner. |
+{{/if HAS_DB}}
+{{#if HAS_ADMIN_BOOTSTRAP}}
+| Login admin echoue | (1) Verifier `ADMIN_PSEUDO` + `ADMIN_PASSWORD` dans `.env`. (2) Rate limit applicable -- attendre. (3) Si toujours KO : `docker compose exec db psql -U {{PROJECT_SLUG}} -d {{PROJECT_SLUG}} -c "SELECT pseudo FROM \"User\";"` -- l'admin doit exister. |
+{{/if HAS_ADMIN_BOOTSTRAP}}
+| Uploads 404 | `docker compose exec app ls /app/data/uploads/` -- le fichier doit etre liste. Si volume non monte, relire `docker-compose.yml`. |
+| Pull image GHCR echoue sur le VPS (`unauthorized`/`denied`) | Le package est prive (normal) : (re)faire `echo <PAT_read:packages> | docker login ghcr.io -u <user> --password-stdin` sur le VPS. Verifier que le token a bien `read:packages` et n'est pas expire. Ne PAS rendre le package public. |
+| GHA `tailscale: denied` | Verifier ACL Tailscale : tag `tag:ci` doit avoir acces SSH au tag `tag:prod` en tant que `deploy`. |
+
+## Contacts & liens
+
+- Repo : <https://github.com/{{GITHUB_OWNER}}/{{GITHUB_REPO}}>
+- Actions : <https://github.com/{{GITHUB_OWNER}}/{{GITHUB_REPO}}/actions>
+- Console Hetzner : <https://console.hetzner.com/>
+- Admin Tailscale : <https://login.tailscale.com/admin>
+- Spec d'architecture : [`specs/deploy-hetzner.md`](../specs/deploy-hetzner.md)
+
+## Maintenance de ce runbook
+
+Toute modif d'infra (nouveau service, nouveau secret, nouvelle procedure) doit mettre a jour ce fichier dans le meme PR. Si une procedure ici diverge de la realite du VPS, la corriger immediatement -- c'est le seul document que liront les futurs mainteneurs.

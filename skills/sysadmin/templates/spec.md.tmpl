@@ -1,0 +1,362 @@
+# Spec - Deploiement Hetzner ({{PROJECT_NAME}})
+
+> **Note agent IA** - Cette spec pilote un deploiement Hetzner production-like. Lire l'etat d'avancement avant toute action, suivre la "Prochaine action", ne pas refaire les etapes deja cochees `[x]`.
+
+## Etat d'avancement
+
+Derniere mise a jour : <date du jour>.
+
+**Partie 1 - Repo (code cote application)**
+
+| § | Objet | Statut |
+|---|---|---|
+| 1.1 | `deploy/docker-compose.yml` (services + mem_limit) | [ ] |
+| 1.2 | `deploy/Caddyfile` (TLS + security headers) | [ ] |
+| 1.3 | `.github/workflows/deploy.yml` (lint + tsc + Tailscale SSH + SHA pin{{#if HAS_DB}} + migrate via tunnel{{/if HAS_DB}}) | [ ] |
+{{#if HAS_ADMIN_BOOTSTRAP}}
+| 1.4 | Bootstrap admin (`instrumentation.ts` + `lib/bootstrap-admin.ts`) | [ ] |
+{{/if HAS_ADMIN_BOOTSTRAP}}
+| 1.5 | Base verifiee (`next.config.ts` standalone, `Dockerfile` multi-stage) | [ ] |
+
+**Partie 2 - VPS (bootstrap infra)**
+
+| § | Objet | Statut |
+|---|---|---|
+| 2.1 | Provisionner Hetzner CX23 | [ ] |
+| 2.2 | OS + patches + user `deploy` + SSH hardening | [ ] |
+| 2.3 | Docker + log rotation | [ ] |
+| 2.4 | Tailscale up + ACL + OAuth client | [ ] |
+| 2.5 | Record DNS A + TTL 60 | [ ] |
+| 2.6 | Hetzner Cloud Firewall (80/443 inbound only) | [ ] |
+| 2.7 | scp `deploy/docker-compose.yml` + `Caddyfile` -> `/opt/{{PROJECT_SLUG}}/` | [ ] |
+| 2.8 | `/opt/{{PROJECT_SLUG}}/.env` (chmod 600) | [ ] |
+| 2.9 | Secrets GitHub (TS OAuth + SSH host/user) | [ ] |
+| 2.10 | Auth GHCR + premier `docker compose up -d` | [ ] |
+| 2.11 | Checklist production-like validee | [ ] |
+| 2.12 | `deploy/README.md` runbook | [ ] |
+
+**Prochaine action** : §1.1.
+
+**Domaine concret** : `{{DOMAIN_APEX}}`. Le sous-domaine preview = `{{PREVIEW_HOST}}`. Le go-live cible l'apex `{{DOMAIN_APEX}}` (et/ou `www.`).
+
+## Objectif
+
+Mettre en ligne une premiere version (Next.js 16{{#if HAS_DB}} + Postgres 17{{/if HAS_DB}} + uploads volume) pour tests client. **Preview = prod des le jour 1** : meme durcissement, meme pipeline. Au go-live, on ne bascule que le domaine DNS.
+
+## Decisions
+
+| Sujet | Choix |
+|---|---|
+| Hebergeur | **Hetzner Cloud CX23** ({{HETZNER_LOCATION}}) - 2 vCPU x86, 4 GB RAM, 40 GB NVMe, 20 TB trafic. Protection DDoS L3/L4 incluse. |
+| Build | **GitHub Actions -> `ghcr.io`** (pas de build sur le VPS) |
+| URL preview | Sous-domaine `{{PREVIEW_HOST}}`, record DNS A direct vers l'IPv4 Hetzner |
+| Reverse proxy / TLS | **Caddy 2** expose :80/:443, TLS auto via **Let's Encrypt**. Volume `caddy_data` persiste les certs. |
+| Acces SSH | **Tailscale uniquement** (`--ssh`), jamais de :22 public |
+| Firewall | **Hetzner Cloud Firewall** (reseau, en amont de la VM) - inbound TCP 80/443 + ICMP, outbound libre, pas de :22. Pas de `ufw` sur la VM (Docker bypass iptables/ufw pour les ports publish). |
+| Deploiement | GitHub Actions -> Tailscale -> VPS sur push `main`, **image pinnee par SHA** |
+| Updates OS | `unattended-upgrades` (securite), reboot manuel mensuel |
+| Backups | **Hetzner Cloud Backups** (+20%, snapshots quotidiens, 7 retentions) |
+{{#if HAS_ADMIN_BOOTSTRAP}}
+| Seed admin | `instrumentation.ts` + `lib/bootstrap-admin.ts` - upsert idempotent au boot depuis `ADMIN_PSEUDO`/`ADMIN_PASSWORD` |
+{{/if HAS_ADMIN_BOOTSTRAP}}
+| Logs Docker | `json-file` max 10 MB x 3 |
+
+**Choix assume : pas de Cloudflare.** Les benefices (masquage IP, DDoS L7, WAF edge) mitigent des menaces inexistantes sur ce workload (site local, pas de PII, pas de paiement). Caddy + LE = une dependance tierce en moins.
+
+## Architecture cible
+
+```
+Internet
+   |  (Hetzner DDoS L3/L4 scrubbing - inclus)
+   v
+Hetzner Cloud Firewall : inbound TCP 80 + 443 + ICMP only, pas de :22
+   |
+   v
++--------------- Hetzner Cloud CX23 ({{HETZNER_LOCATION}}) ---+
+| (pas de firewall hote - Docker bypass ufw/iptables)        |
+| SSH inbound seulement via tailscale0 (Tailscale --ssh)     |
+|                                                             |
+| Caddy :80 :443 -(TLS auto via Let's Encrypt)->              |
+|   (security headers)                                        |
+|                  +-> Next.js standalone                     |
+{{#if HAS_DB}}
+|                          |                                  |
+|                          v                                  |
+|                         Postgres 17                         |
+{{/if HAS_DB}}
+|                                                             |
+| volumes:{{#if HAS_DB}} pgdata,{{/if HAS_DB}} uploads, caddy_data, caddy_config           |
+| docker log-driver: json-file, max-size=10m, max-file=3      |
+| Hetzner Cloud Backups : snapshot auto quotidien             |
++-------------------------------------------------------------+
+        ^
+        | GitHub Actions via Tailscale (push main)
+```
+
+---
+
+# Partie 1 - Changements dans le repo
+
+## 1.1 `deploy/docker-compose.yml`
+
+- Services {{#if HAS_DB}}`db`, {{/if HAS_DB}}`app`, `caddy`.
+{{#if HAS_DB}}
+- `db` : healthcheck `pg_isready`, `mem_limit: 384m`, **bind `127.0.0.1:5432:5432`** (loopback host) - accessible uniquement via SSH Tailscale, permet au runner GHA de tunneler pour `prisma migrate deploy` sans ouvrir Postgres au tailnet.
+{{/if HAS_DB}}
+- `app` : `mem_limit: 768m`, `APP_IMAGE` pinnee par SHA via `.env`.
+- `caddy` : seul service a publier des ports hote (`80:80`, `443:443`), `mem_limit: 96m`. Lit `SITE_ADDRESS` depuis `.env`. Volumes `caddy_data` (certs LE) et `caddy_config` persistants.
+
+## 1.2 `deploy/Caddyfile`
+
+TLS direct via Let's Encrypt. Site block utilise `{$SITE_ADDRESS}` pour eviter de hardcoder le domaine.
+
+```
+{$SITE_ADDRESS} {
+  encode gzip
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    -Server
+  }
+
+  reverse_proxy app:3000
+}
+```
+
+Caddy gere automatiquement : obtention du cert LE au premier boot (HTTP-01 sur :80), renouvellement, redirect HTTP->HTTPS, HSTS preload-ready.
+
+## 1.3 `.github/workflows/deploy.yml`
+
+- `build-and-push` : tags `:latest` + `:sha-<SHA>`, cache GHA.
+- `deploy` :
+{{#if HAS_DB}}
+  - Checkout du repo + `pnpm install --frozen-lockfile` (le runner a besoin de prisma CLI).
+  - `tailscale/github-action@v4` avec OAuth (`TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET`, tag `tag:ci`).
+  - **Migrate via tunnel SSH** : recupere `POSTGRES_PASSWORD` depuis `/opt/{{PROJECT_SLUG}}/.env` du VPS, masque dans les logs (`::add-mask::`), ouvre `ssh -f -N -L 5433:127.0.0.1:5432`, puis `pnpm exec prisma migrate deploy`. Tunnel ferme avec `pkill`.
+  - **Deploy app/caddy** : SSH sur `deploy@<SSH_HOST>` via Tailscale SSH, ecrit `APP_IMAGE=<...>:sha-<SHA>` dans `/opt/{{PROJECT_SLUG}}/.env`, puis `docker compose pull app` + `docker compose up -d`.
+{{/if HAS_DB}}
+{{#if !HAS_DB}}
+  - `tailscale/github-action@v4` avec OAuth, tag `tag:ci`.
+  - SSH sur `deploy@<SSH_HOST>` via Tailscale SSH, ecrit `APP_IMAGE=<...>:sha-<SHA>` dans `/opt/{{PROJECT_SLUG}}/.env`, puis `docker compose pull app` + `docker compose up -d`.
+{{/if !HAS_DB}}
+- `set -euo pipefail` :{{#if HAS_DB}} migration qui echoue stoppe le deploiement.{{/if HAS_DB}}
+{{#if HAS_DB}}
+- **Contrainte migrations** : `migrate deploy` tourne sur le runner GHA *avant* le swap d'image. Pendant ~2-5 s entre la migrate et le restart, le container `app` existant sert avec le nouveau schema. Seules les migrations **backward-compatibles one-step** (add column/table nullable, add index concurrent) sont safe. Pour rename/drop/not-null-on-existing-column, passer par un plan a deux deploiements (expand puis contract).
+{{/if HAS_DB}}
+- **Hors scope du workflow** : `deploy/docker-compose.yml` et `deploy/Caddyfile` ne sont pas re-synchronises automatiquement sur le VPS. Toute modif de ces fichiers exige un `scp` manuel.
+{{#if HAS_ADMIN_BOOTSTRAP}}
+
+## 1.4 Seed admin via `instrumentation.ts`
+
+- `lib/bootstrap-admin.ts` : upsert `User` sur `pseudo` a partir de `ADMIN_PSEUDO` + `ADMIN_PASSWORD`, hash bcrypt cost 12, no-op si une variable manque.
+- `instrumentation.ts` : appelle `bootstrapAdmin()` une fois au demarrage Node (`NEXT_RUNTIME === "nodejs"`).
+- Aucun credential en clair committe. Au premier `docker compose up -d`, l'app cree l'admin depuis l'env. Changer le mot de passe = modifier `.env` + `docker compose restart app`.
+{{/if HAS_ADMIN_BOOTSTRAP}}
+
+## 1.5 Verifications existant
+
+- `next.config.ts` : `output: 'standalone'` OBLIGATOIRE.
+- `Dockerfile` : multi-stage builder + runner. La runner n'embarque QUE le standalone Next.js + static + public.
+- Pas de scripts shell custom : remplaces par Caddy (TLS auto), Hetzner Cloud Firewall (filtrage reseau), Hetzner Cloud Backups.
+
+---
+
+# Partie 2 - Bootstrap VPS
+
+Une seule passe, ~20 min. Aucun port inbound public en regime permanent (pas meme :443 - le tunnel est sortant).
+
+## 2.1 Provisionner le VPS (Hetzner, ~10 min)
+
+1. Creer un projet dans **[console.hetzner.com](https://console.hetzner.com/)** -> *Add Server*.
+2. Location **{{HETZNER_LOCATION}}**, image **Debian 12**, type **CX23** (shared vCPU x86).
+3. Cocher **Backups** (+20% = ~0.80 EUR/mo, snapshots quotidiens, 7 retentions).
+4. Ajouter une cle SSH publique de bootstrap (jetable - supprimee a la fin de §2.4).
+5. Noter l'IPv4 publique affichee.
+
+## 2.2 OS + patches automatiques
+
+SSH initial : `ssh root@<ip>`.
+
+```bash
+apt update && apt full-upgrade -y
+
+# Patches de securite automatiques
+apt install -y unattended-upgrades apt-listchanges
+dpkg-reconfigure -plow unattended-upgrades
+
+# User deploy
+adduser --disabled-password deploy
+usermod -aG sudo deploy
+mkdir -p /home/deploy/.ssh
+chown -R deploy:deploy /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
+
+# sshd hardening
+sed -i 's/#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+systemctl restart ssh
+```
+
+## 2.3 Docker + log rotation
+
+```bash
+curl -fsSL https://get.docker.com | sh
+usermod -aG docker deploy
+
+tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+systemctl restart docker
+```
+
+## 2.4 Tailscale
+
+Creer dans l'admin Tailscale un auth-key *reusable=false, ephemeral=false, tagged `tag:prod`*.
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up --ssh --hostname={{VPS_HOSTNAME_TS}} --auth-key=<key>
+```
+
+Dans la console Tailscale -> **Access Controls**, declarer les tagOwners et autoriser le runner GHA (tag `tag:ci`) a SSH sur le VPS (tag `tag:prod`) en tant que `deploy` :
+
+```jsonc
+{
+  "tagOwners": {
+    "tag:ci":   ["autogroup:admin"],
+    "tag:prod": ["autogroup:admin"]
+  },
+  "acls": [
+    { "action": "accept", "src": ["tag:ci"], "dst": ["tag:prod:22"] }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src":    ["tag:ci"],
+      "dst":    ["tag:prod"],
+      "users":  ["deploy"]
+    }
+  ]
+}
+```
+
+Sans ces regles, l'etape `deploy` du workflow echoue avec `Tailscale SSH: denied`.
+
+Creer aussi un OAuth client (Settings -> OAuth clients) avec le scope **`Auth Keys: Write`** et le tag `tag:ci` : il alimente `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET` cote GitHub. L'action `tailscale/github-action@v4` mint un auth-key ephemere a chaque run, d'ou le scope `auth_keys` write (cf. <https://tailscale.com/docs/integrations/github/github-action>).
+
+Verifier depuis un device du tailnet : `ssh deploy@{{VPS_HOSTNAME_TS}}` fonctionne sans cle SSH locale. La cle publique ajoutee a la console Hetzner peut etre retiree.
+
+## 2.5 DNS + certificat Let's Encrypt
+
+Zone DNS chez le registrar :
+
+1. Record **A** : `{{PREVIEW_HOST}}` -> IPv4 du CX23 (notee en §2.1).
+2. TTL 300 en preview, 3600+ au go-live.
+3. **Pas de record AAAA** tant qu'on n'active pas IPv6 cote VPS.
+
+Une fois le DNS propage (`dig {{PREVIEW_HOST}} +short` doit renvoyer l'IP) et `docker compose up -d` lance (§2.10), Caddy obtient le cert LE automatiquement.
+
+## 2.6 Hetzner Cloud Firewall
+
+Firewall **reseau** (en amont de la VM, gratuit, sans coupure). On n'utilise PAS `ufw` sur la VM : Docker bypass les regles iptables/ufw pour les ports qu'il publish (cf. <https://github.com/moby/moby/issues/4737>), donc ufw ne protege pas les ports exposes par compose. Le Hetzner Cloud Firewall, lui, intercepte tout avant que les paquets atteignent la VM.
+
+Console -> **Firewalls** -> *Create Firewall* `{{PROJECT_SLUG}}-public-web` :
+
+- Inbound rules : TCP 80, TCP 443, ICMP (toutes Any IPv4 + Any IPv6). **Supprimer la regle TCP 22 pre-remplie par defaut.**
+- Outbound rules : vide (tout autorise).
+- Apply to : `{{VPS_HOSTNAME_TS}}`.
+
+SSH passe par Tailscale (tunnel WireGuard sortant), donc le firewall inbound n'a aucun impact dessus.
+
+## 2.7 Fichiers de deploiement
+
+Depuis un device du tailnet :
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}} 'sudo mkdir -p /opt/{{PROJECT_SLUG}} && sudo chown -R deploy:deploy /opt/{{PROJECT_SLUG}}'
+scp deploy/docker-compose.yml deploy/Caddyfile deploy@{{VPS_HOSTNAME_TS}}:/opt/{{PROJECT_SLUG}}/
+```
+
+**Maintenance** : le workflow GitHub ne re-pousse pas ces fichiers. Toute modif future doit etre propagee manuellement avec le meme `scp`, puis `docker compose up -d` sur le VPS.
+
+## 2.8 Creer `/opt/{{PROJECT_SLUG}}/.env`
+
+Sur le VPS (voir le bloc `env.tmpl` rendu par /sysadmin pour le template exact). `chmod 600 /opt/{{PROJECT_SLUG}}/.env`.
+
+## 2.9 Secrets GitHub
+
+| Secret | Valeur |
+|---|---|
+| `TS_OAUTH_CLIENT_ID` | Client ID Tailscale OAuth |
+| `TS_OAUTH_SECRET`    | Secret Tailscale OAuth |
+| `SSH_HOST`           | `{{VPS_HOSTNAME_TS}}` (hostname Tailscale) |
+| `SSH_USER`           | `deploy` |
+
+## 2.10 Premier deploiement
+
+**Auth GHCR** : garder le package **prive** (les couches Docker exposent code + secrets baked-in). Authentifier le VPS en LECTURE seule : fine-grained PAT `read:packages` uniquement, puis `docker login ghcr.io -u {{GITHUB_OWNER}} --password-stdin` sur le VPS (jamais un token d'ecriture sur le serveur). Le push CI passe par le `GITHUB_TOKEN` automatique.
+
+Push sur `main` declenche tout. GHA build, {{#if HAS_DB}}migre, {{/if HAS_DB}}swap APP_IMAGE, `docker compose up -d`. Caddy resout le challenge ACME -> `https://{{PREVIEW_HOST}}` repond avec un cert valide.
+
+## 2.11 Checklist production-like
+
+- [ ] **Ports publics** : `nc -zvw3 <ip> <port>` (depuis hors tailnet) confirme :22/:5432 = TIMEOUT (Hetzner Cloud Firewall les bloque), :80/:443 = open.
+- [ ] **HTTPS headers** : `curl -I https://{{PREVIEW_HOST}}/` -> HTTP/2 200, headers HSTS / nosniff / DENY / referrer / permissions presents.
+- [ ] **HTTP redirect** : `curl -I http://{{PREVIEW_HOST}}/` -> 308 vers https://.
+- [ ] **Cert LE** : issuer `Let's Encrypt`, expire >60j.
+- [ ] **`docker compose ps`** : tous services `running`{{#if HAS_DB}} + `db` `healthy`{{/if HAS_DB}}.
+- [ ] **`docker stats`** : limites memoire respectees (<25%).
+- [ ] **Rollback teste** : eviter de tester en prod du jour 1, mais documenter.
+{{#if HAS_ADMIN_BOOTSTRAP}}
+- [ ] **Login admin** : valide en navigateur.
+{{/if HAS_ADMIN_BOOTSTRAP}}
+- [ ] **Upload + restart** : upload via /admin, `docker compose restart app`, le fichier survit.
+- [ ] **`unattended-upgrades --dry-run --debug`** : seules sources securite Debian permises.
+- [ ] **Backup Hetzner** : 1er snapshot confirme (24h apres le boot), restore-test sur VPS jetable.
+
+## 2.12 Runbook d'exploitation - `deploy/README.md`
+
+Ecrire le runbook avant de clore le bootstrap. /sysadmin genere `deploy/README.md` adapte au projet.
+
+---
+
+## Couts
+
+| Poste | EUR/mois HT |
+|---|---|
+| Hetzner Cloud CX23                             | 3.99 |
+| Hetzner Cloud Backups (+20%)                   | 0.80 |
+| Let's Encrypt (TLS)                            | 0 |
+| Tailscale (Personal, 1 user)                   | 0 |
+| **Total preview = prod**                       | **~4.79** |
+
+## Go-live
+
+Preview = prod ; il ne reste qu'a basculer le domaine public. Deux scenarios :
+
+### A. Premiere mise en ligne (pas de site existant a remplacer)
+
+1. Etendre `SITE_ADDRESS` dans `/opt/{{PROJECT_SLUG}}/.env` : `{{PREVIEW_HOST}}, {{DOMAIN_APEX}}, www.{{DOMAIN_APEX}}` (Caddy accepte la liste). `docker compose up -d caddy`.
+2. Modifier `NEXT_PUBLIC_SITE_URL` dans `.env` : `https://{{PREVIEW_HOST}}` -> `https://{{DOMAIN_APEX}}`. `docker compose up -d app`.
+3. Creer les records **A** `{{DOMAIN_APEX}}` (et `www.{{DOMAIN_APEX}}` si pas de CNAME existant) -> IPv4 du CX23 chez le registrar. TTL 60 pour la bascule.
+4. Caddy obtient le cert LE en ~30s. Si echec TLS apres bascule (`tlsv1 alert internal error`) -> Caddy en backoff -> `docker compose restart caddy` (cf. runbook).
+5. Decommissionner le sous-domaine preview dans les 30 min : retirer de `SITE_ADDRESS`, supprimer le record DNS preview (cf. runbook "Migration DNS").
+
+### B. Migration depuis un site existant (SEO-sensible)
+
+Quand l'apex `{{DOMAIN_APEX}}` heberge deja un site qui ranke sur Google (WordPress legacy, autre CMS, etc.) et qu'il faut basculer le trafic sans perdre le ranking : la procedure est plus longue (J-7 prep, J-1 cohabitation Caddy, J0 sequence stricte env -> DNS -> verify -> decommission, J+7 monitoring + cleanup, J+30 ranking comparison).
+
+**Generer la spec dediee** : `/sysadmin` -> "SEO migration plan" -> ecrit `specs/seo-migration.md` avec :
+- Inventaire de l'existant (top requetes GSC, backlinks, URLs indexees -> mapping redirects 301).
+- Code SEO a verifier dans le repo (`app/robots.ts`, `app/sitemap.ts`, `next.config.ts redirects()`, JSON-LD, canonical, OG, metadata par page).
+- Sequence J-7 / J-1 / J0 / J+7 / J+30 avec commandes copy-paste.
+- Checklist GSC (proprietes, sitemap, indexation, surveillance Performances + Core Web Vitals).
+- Procedure de resiliation de l'ancien hebergement sans casser email (MX) ni DNS.
+
+**Important** : aucune refonte d'archi cote VPS. Un nouveau cert LE par hostname (quota largement sous le rate limit). Le sequencing precis (env app AVANT bascule DNS, decommission preview rapide pour fermer la fenetre duplicate content) est ce qui evite le drop de ranking.

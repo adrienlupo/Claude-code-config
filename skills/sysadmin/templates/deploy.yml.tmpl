@@ -1,0 +1,153 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm exec tsc --noEmit
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long,prefix=sha-
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - id: image
+        # ghcr.io requires lowercase; ${IMAGE_NAME,,} downcases github.repository.
+        run: echo "ref=${REGISTRY}/${IMAGE_NAME,,}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v6
+{{#if HAS_DB}}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+{{/if HAS_DB}}
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+{{#if HAS_DB}}
+
+      - name: Migrate database via SSH tunnel
+        # Prisma's official pattern: run `migrate deploy` from the CI runner, not
+        # inside the runtime container.
+        # https://www.prisma.io/docs/orm/prisma-client/deployment/deploy-database-changes-with-prisma-migrate
+        # https://github.com/prisma/prisma/discussions/22712 (private DB via SSH)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euo pipefail
+          # Read POSTGRES_PASSWORD from /opt/{{PROJECT_SLUG}}/.env on the VPS (single source of truth).
+          PG_PASSWORD=$(ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "$SSH_USER@$SSH_HOST" \
+            "grep '^POSTGRES_PASSWORD=' /opt/{{PROJECT_SLUG}}/.env | cut -d= -f2-")
+          if [ -z "$PG_PASSWORD" ]; then
+            echo "::error::POSTGRES_PASSWORD not found on VPS"
+            exit 1
+          fi
+          # Mask the password in GHA logs.
+          echo "::add-mask::$PG_PASSWORD"
+
+          # Open SSH tunnel: GHA :5433 -> VPS host loopback :5432.
+          ssh -f -N \
+            -L 5433:127.0.0.1:5432 \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            -o ExitOnForwardFailure=yes \
+            "$SSH_USER@$SSH_HOST"
+
+          # Run migrations against tunnelled Postgres.
+          DATABASE_URL="postgresql://{{PROJECT_SLUG}}:${PG_PASSWORD}@127.0.0.1:5433/{{PROJECT_SLUG}}" \
+            pnpm exec prisma migrate deploy
+
+          # Tear tunnel down.
+          pkill -f 'ssh -f -N -L 5433:127.0.0.1:5432' || true
+{{/if HAS_DB}}
+
+      - name: Deploy app
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          APP_IMAGE: ${{ needs.build-and-push.outputs.image }}
+        run: |
+          ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            "$SSH_USER@$SSH_HOST" bash -s <<EOF
+          set -euo pipefail
+          cd /opt/{{PROJECT_SLUG}}
+
+          # Pin new image version in .env for rollback-friendly deploys.
+          if grep -q '^APP_IMAGE=' .env; then
+            sed -i "s|^APP_IMAGE=.*|APP_IMAGE=${APP_IMAGE}|" .env
+          else
+            echo "APP_IMAGE=${APP_IMAGE}" >> .env
+          fi
+
+          docker compose pull app
+          docker compose up -d
+          EOF

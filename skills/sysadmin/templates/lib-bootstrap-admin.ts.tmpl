@@ -1,0 +1,16 @@
+import { hash } from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+
+export async function bootstrapAdmin() {
+  const pseudo = process.env.ADMIN_PSEUDO;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!pseudo || !password) return;
+
+  const hashedPassword = await hash(password, 12);
+  await prisma.user.upsert({
+    where: { pseudo },
+    update: { hashedPassword },
+    create: { pseudo, hashedPassword },
+  });
+  console.info(`[bootstrap] admin ready: ${pseudo}`);
+}

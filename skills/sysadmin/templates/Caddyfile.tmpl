@@ -1,0 +1,25 @@
+# SITE_ADDRESS (defini dans /opt/{{PROJECT_SLUG}}/.env) accepte une liste de hostnames
+# separes par des virgules. Caddy obtient un cert LE par hostname et les sert tous via
+# ce meme block. Utilise pour la cohabitation preview + apex pendant une migration DNS
+# (cf. deploy/README.md "Migration DNS" et specs/seo-migration.md §J-1).
+#
+# /!\ Si tu etends SITE_ADDRESS a J-1 (DNS pas encore bascule), Caddy va tenter le
+# challenge HTTP-01 sur le nouvel hostname et echouer (DNS pointe ailleurs). Il
+# entre alors en backoff exponentiel et NE retentera PAS spontanement a la bascule.
+# Apres la bascule DNS : "docker compose restart caddy" pour forcer un retry. Cf.
+# runbook entree "Cert LE en backoff post-bascule DNS".
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	reverse_proxy app:3000
+}

@@ -1,0 +1,462 @@
+# Migration SEO - {{DOMAIN_APEX}}
+
+Plan operationnel pour basculer un site existant ({{LEGACY_HOST_LABEL}}) vers la nouvelle version Next.js deployee sur ce VPS Hetzner, sans perdre le ranking Google.
+
+---
+
+## 0. Etat de la migration
+
+> Tableau de bord : ou on en est, quelle est la prochaine etape. Mis a jour au fil des conversations.
+
+**Phase courante** : a remplir au fur et a mesure (preparation / J-1 / J0 / surveillance).
+
+**Prochaine action attendue** : a remplir.
+
+### Journal
+
+| Quand | Etape | Statut |
+|---|---|---|
+
+Legende : OK fait | EN COURS en cours | TODO a faire | KO bloque
+
+---
+
+## 1. Contexte
+
+- **Site actuel (legacy)** : `https://{{DOMAIN_APEX}}/` heberge sur {{LEGACY_HOST_LABEL}} - ranke sur Google, a preserver.
+- **Site nouveau** : Next.js (ce repo), deja deploye sur `https://{{PREVIEW_HOST}}` pour validation. Apres bascule DNS, le serveur preview sera decommissionne (un seul VPS en prod).
+- **Risque** : migration sans precautions = chute de ranking pendant des semaines (perte de backlinks, duplicate content, URLs cassees).
+
+### Comment lire cette spec
+
+Lire dans l'ordre - chaque section depend de la precedente :
+
+| Phase | Section | Quand |
+|---|---|---|
+| Preparation (en parallele) | sec.2 | Aujourd'hui |
+| Configurer Google Search Console | sec.4 | Aujourd'hui |
+| Reduire le TTL DNS | sec.6.3 | J-1 |
+| Bascule DNS | sec.6 + checklist sec.7 | Jour J |
+| Soumettre sitemap, demander indexation | sec.4.3 + sec.4.4 | J0 + 1h |
+| Surveillance ranking + indexation | sec.5 | J+1 a J+30 |
+
+---
+
+## 2. A faire des maintenant (sans attendre la bascule)
+
+Ces actions sont independantes et peuvent etre lancees en parallele, sans risque pour le site en prod actuel.
+
+### 2.1. Google Search Console - verifier la propriete (15 min)
+
+Indispensable pour piloter la migration. Detail : sec.4.1.
+
+- [ ] Compte Google dedie au club/projet (pas perso).
+- [ ] Ajouter la propriete **Domaine** `{{DOMAIN_APEX}}` (couvre toutes les variantes : http/https/www/sous-domaines).
+- [ ] (Optionnel) Ajouter aussi la propriete **Prefixe d'URL** `https://{{DOMAIN_APEX}}` (donne acces a certaines features GSC reservees aux prefixes).
+- [ ] **Inviter un second admin** dans GSC pour ne pas perdre l'acces.
+
+Une fois fait, acces aux donnees historiques de l'ancien site (ranking, requetes, backlinks).
+
+### 2.2. Inventaire de l'existant (1h)
+
+- [ ] GSC -> **Liens** -> exporter les **backlinks externes**. Reperer les domaines importants (federations, mairie, partenaires) - leurs liens doivent etre preserves via les 301.
+- [ ] GSC -> **Performances** -> noter le top 10 des requetes qui amenent du trafic.
+- [ ] GSC -> **Pages** -> exporter la liste de toutes les URLs indexees. Pour chacune, prevoir un redirect 301 vers l'URL equivalente du nouveau site.
+- [ ] Backup complet du site legacy (DB + uploads / fichiers media).
+
+### 2.2.1. Top requetes recoltees
+
+| # | Requete | Clics | Impressions | CTR | Page cible nouveau site |
+|---|---|---|---|---|---|
+
+### 2.2.2. Mapping URLs legacy -> nouvelles (a coder dans `next.config.ts redirects()`)
+
+| Ancienne URL | Nouvelle URL |
+|---|---|
+
+### 2.3. Tests sur le serveur preview (2h)
+
+- [ ] `https://{{PREVIEW_HOST}}/robots.txt` retourne `Disallow: /` (preuve que `NEXT_PUBLIC_SITE_URL` pointe bien vers preview).
+- [ ] `https://{{PREVIEW_HOST}}/sitemap.xml` retourne un XML vide (`<urlset></urlset>`).
+- [ ] Tester tous les formulaires (contact, login admin, etc.).
+- [ ] Tester sur **mobile reel** (pas DevTools).
+- [ ] Tester le **JSON-LD** : copier l'URL preview dans https://search.google.com/test/rich-results.
+- [ ] Tester l'**OpenGraph** : coller l'URL dans https://www.opengraph.xyz/.
+- [ ] **Lighthouse** sur la home preview : viser 90+ en Performance, 100 en SEO (preview a SEO degrade volontairement par Disallow: / - normal).
+
+### 2.4. Local SEO bonus (30 min)
+
+- [ ] Verifier ou creer la fiche **Google Business Profile** (si applicable). Adresse, telephone, photos, horaires.
+- [ ] Si deja creee : verifier la coherence NAP (nom, adresse, telephone) avec le nouveau site - chaque divergence diminue le score local.
+
+### 2.5. Recuperer l'IP du VPS Hetzner (5 min)
+
+- [ ] Console Hetzner Cloud -> projet -> serveur -> noter IPv4 publique (et IPv6 si activee).
+
+### 2.6. Verifier que le serveur preview bloque bien l'indexation
+
+```bash
+curl -s https://{{PREVIEW_HOST}}/robots.txt
+# Doit retourner : User-agent: *  /  Disallow: /
+```
+
+Si KO, verifier que `/opt/{{PROJECT_SLUG}}/.env` contient `NEXT_PUBLIC_SITE_URL=https://{{PREVIEW_HOST}}` (cf. runbook section "Variables d'env critiques pour le SEO").
+
+### 2.7. Optimiser les meta descriptions sur les pages cibles
+
+Pour chaque top-requete (sec.2.2.1), s'assurer que la `<meta name="description">` de la page cible :
+- contient les mots-cles de la requete dans les premiers caracteres
+- fait moins de 160 caracteres (limite SERP desktop) - tester avec https://www.searchsmarketing.com.au/serp-snippet-tool/ ou similaire
+
+---
+
+## 3. Ce qui doit etre en place dans le code (pre-bascule)
+
+Verifier que le repo a tout cela avant la bascule. Si manquant, l'ajouter dans une PR avant J0.
+
+| Element | Fichier | Effet SEO |
+|---|---|---|
+| Variable `NEXT_PUBLIC_SITE_URL` | `lib/seo.ts` (ou equivalent) | Distingue prod / preview. Source de verite unique. |
+| `robots.txt` dynamique | `app/robots.ts` (App Router) avec `export const dynamic = 'force-dynamic'` | Bloque entierement le preview, autorise la prod |
+| `sitemap.xml` dynamique | `app/sitemap.ts` (idem dynamic) | Liste les pages publiques ; vide sur preview |
+| Metadata root | `app/layout.tsx` : `metadataBase`, `title.template`, OpenGraph, Twitter, robots conditionnel | Coherence sur toutes les pages |
+| Metadata homepage | `app/page.tsx` : title + description optimises sur la requete principale + canonical | Pertinence SERP |
+| JSON-LD schema.org | `components/structured-data.tsx` (ou equivalent) : `Organization`, `WebSite`, `LocalBusiness`/`SportsClub` selon le type, `BreadcrumbList` sur pages internes | Knowledge Panel + rich results |
+| Canonical sur toutes les pages | chaque `app/*/page.tsx` | Evite duplicate content |
+| Redirects 301 conditionnels | `next.config.ts redirects()` gate par `NEXT_PUBLIC_SITE_URL == PRODUCTION_URL` | Preserve link equity des backlinks legacy. **Desactive en preview** pour pouvoir tester sans interferer avec le site WP encore en prod. |
+
+> Note : Next.js sert techniquement des **308 Permanent Redirect**, equivalent SEO du 301 (Google traite les deux pareil pour le link equity).
+
+---
+
+## 4. Google Search Console - operations
+
+### 4.1. Verifier la propriete du domaine (Domaine, pas Prefixe)
+
+1. https://search.google.com/search-console -> *Ajouter une propriete* -> **Domaine** (couvre toutes variantes).
+2. Saisir `{{DOMAIN_APEX}}`.
+3. Google fournit un TXT a ajouter dans la zone DNS du domaine chez le registrar.
+4. Apres ajout DNS (propagation 5-30 min) -> retour GSC -> **Verifier**.
+5. **Laisser le TXT en place pour toujours** (sa suppression revoque la verification).
+
+### 4.2. (Optionnel) Ajouter aussi le Prefixe d'URL `https://{{DOMAIN_APEX}}`
+
+Donne acces aux features GSC reservees aux Prefixes (Change of address, certains rapports).
+
+### 4.3. Soumettre le sitemap (apres la bascule J0)
+
+1. Verifier `https://{{DOMAIN_APEX}}/sitemap.xml` retourne du XML (et pas une 404).
+2. GSC -> **Sitemaps** -> saisir l'URL **complete** : `https://{{DOMAIN_APEX}}/sitemap.xml`.
+3. Click **Envoyer**. Statut "Couldn't fetch" / "Inconnu" est normal post-submission - Google n'a pas encore tente le crawl. Recharger 15-30 min plus tard - doit passer a **Reussite** avec le nombre d'URLs decouvertes.
+
+### 4.4. Demander l'indexation des pages cles
+
+GSC -> **Inspection de l'URL** (barre du haut) -> coller chaque URL -> attendre l'inspection live (10-30s) -> click **Demander l'indexation**.
+
+URLs a soumettre apres la bascule :
+
+- `https://{{DOMAIN_APEX}}/`
+- (lister ici les autres pages publiques principales)
+
+Quota : ~10 demandes manuelles / jour.
+
+### 4.5. Verifier les redirects 301 (J+1 a J+7)
+
+Pour chaque ancienne URL legacy : Inspection de l'URL -> doit etre **Page avec redirection** vers la cible attendue.
+
+### 4.6. Gerer les proprietes legacy + nouvelle
+
+- Conserver la propriete legacy (ex. `http://{{DOMAIN_APEX}}` Prefixe) **pour toujours** - garde l'historique de ranking.
+- La nouvelle propriete Domaine est la principale post-bascule.
+
+### 4.7. Notifications GSC normales post-bascule (a ne pas paniquer)
+
+| Notification | Cause | Action |
+|---|---|---|
+| "Page avec redirection" (non indexee) | Ancienne URL legacy 301-redirige vers la nouvelle - exactement ce qu'on veut | Aucune. Verifier que la cible est bien celle voulue. |
+| "Page en double : Google n'a pas choisi la meme URL canonique que l'utilisateur" | Variantes (http/https, www/non-www, slash/no-slash) - Google consolide vers une URL canonique qui peut differer du `<link rel="canonical">` | Cliquer sur la notif, comparer "declaree par l'utilisateur" vs "selectionnee par Google". Si la canonique Google = la cible du redirect 301 du nouveau site -> tout va bien. |
+| "URL inconnue de Google" sur ancienne URL legacy | Pas encore re-crawle | Demander indexation manuellement ou attendre. |
+| Chute du nombre de pages indexees | Anciennes URLs retirees, nouvelles pas encore consolidees | Normal pendant 2 a 4 semaines. Suivre la courbe, pas une mesure ponctuelle. |
+
+A ignorer **uniquement si** l'URL est dans le mapping de redirects (sec.3) ou correspond a un canonical voulu. Toute notif sur une URL non mappee = redirect manquant a ajouter dans `next.config.ts`.
+
+---
+
+## 5. Surveillance post-bascule (4 a 8 semaines)
+
+### 5.1. Indexation des pages (GSC -> Indexation -> Pages)
+
+- "Pages indexees" doit progressivement atteindre le nombre d'URLs publiques.
+- "Non indexees" : c'est normal d'en avoir (login, pages admin bloquees par robots). Verifier les raisons.
+- Erreurs (rouge) : a corriger immediatement.
+
+### 5.2. Performances (GSC -> Performances -> Resultats de recherche)
+
+- Clics et impressions sur 30/90 jours.
+- Une chute de 20-30% la premiere semaine est normale (re-indexation). Au-dela ou si la chute persiste apres 4 semaines = probleme.
+- Filtrer par requete pour voir si les top-requetes restent en top 3.
+- Filtrer par page : la home doit etre la page n.1.
+
+### 5.3. Core Web Vitals (GSC -> Experience -> Signaux Web essentiels)
+
+Ranking factor depuis 2021. Le site Next.js part avec un avantage (rendu statique / serveur, images optimisees). Cibles :
+- **LCP** (Largest Contentful Paint) < 2.5s
+- **INP** (Interaction to Next Paint) < 200ms
+- **CLS** (Cumulative Layout Shift) < 0.1
+
+Donnees mises a jour avec ~28 jours de retard.
+
+### 5.4. Backlinks (GSC -> Liens)
+
+Verifier que les sites externes pointant vers les anciennes URLs legacy voient leurs liens correctement rediriges. Si un backlink important pointe vers une URL non mappee, ajouter un redirect dans `next.config.ts`.
+
+---
+
+## 6. Bascule DNS - guide pas a pas
+
+Objectif : faire pointer `{{DOMAIN_APEX}}` vers le VPS Hetzner qui sert deja `{{PREVIEW_HOST}}`.
+
+### 6.1. Recuperer l'IP du serveur Hetzner
+
+Console Hetzner Cloud -> serveur -> IPv4 publique. **IP a utiliser : `<VPS_IPV4>`** (et IPv6 si applicable).
+
+### 6.2. Preparer le serveur a recevoir le domaine principal
+
+> **Timing critique** :
+> - Etape **A** (etendre `SITE_ADDRESS`) peut se faire a J-1 sans risque.
+> - Etape **B** (changer `NEXT_PUBLIC_SITE_URL`) se fait **uniquement a J0, juste avant la bascule DNS**. Si faite avant, le serveur preview servira `Allow: /` sur `{{PREVIEW_HOST}}` -> Google peut le crawler comme contenu prod (duplicate).
+
+#### A. A J-1 - etendre `SITE_ADDRESS`
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+sudo nano .env
+```
+
+```env
+SITE_ADDRESS={{PREVIEW_HOST}}, {{DOMAIN_APEX}}, www.{{DOMAIN_APEX}}
+```
+
+**Ne pas toucher a `NEXT_PUBLIC_SITE_URL`** - laisser sur preview.
+
+```bash
+docker compose up -d caddy
+docker compose logs --since 1m caddy
+```
+
+Caddy va tenter d'emettre les certs pour les 3 hostnames. Echec attendu pour `{{DOMAIN_APEX}}` et `www.{{DOMAIN_APEX}}` (DNS pointe encore vers le legacy) -> **Caddy passe en backoff**. C'est normal, mais retenir : a J0 il faudra `docker compose restart caddy` (cf. sec.6.7 et runbook).
+
+#### B. A J0 - changer `NEXT_PUBLIC_SITE_URL`
+
+```bash
+ssh deploy@{{VPS_HOSTNAME_TS}}
+cd /opt/{{PROJECT_SLUG}}
+sudo nano .env
+```
+
+```diff
+- NEXT_PUBLIC_SITE_URL=https://{{PREVIEW_HOST}}
++ NEXT_PUBLIC_SITE_URL=https://{{DOMAIN_APEX}}
+```
+
+```bash
+docker compose up -d app
+```
+
+A partir de cet instant :
+- Sur `{{DOMAIN_APEX}}` : `Allow: /` + sitemap rempli (souhaite).
+- Sur `{{PREVIEW_HOST}}` (encore actif tant que DNS preview n'est pas supprime) : `Allow: /` aussi -> **decommissionner DNS preview rapidement** (sec.6.5).
+
+### 6.3. Reduire le TTL DNS (la veille de la bascule)
+
+Chez le registrar, pour chaque enregistrement A et AAAA pointant vers l'ancien site :
+
+1. Modifier le TTL : `3600` (ou plus) -> `60`.
+2. Attendre min 1 heure (ideal 24h) avant la bascule pour que les anciens TTL expirent partout.
+
+Verifier la propagation TTL ~1h apres modif :
+
+```bash
+dig {{DOMAIN_APEX}} +noall +answer
+dig @1.1.1.1 {{DOMAIN_APEX}} +noall +answer
+dig @8.8.8.8 {{DOMAIN_APEX}} +noall +answer
+```
+
+OK pour J0 si les 3 resolveurs retournent un TTL <= 60. L'IP doit toujours etre celle du legacy (volontaire a ce stade).
+
+### 6.4. Faire la bascule (jour J)
+
+Chez le registrar -> Zone DNS de `{{DOMAIN_APEX}}` :
+
+1. **Modifier le record A** (sous-domaine `@`) : remplacer l'IP du legacy par `<VPS_IPV4>`. TTL 60.
+2. **Modifier le record AAAA** s'il existe : remplacer par l'IPv6 du VPS.
+3. **Verifier `www`** :
+   - Si CNAME vers `{{DOMAIN_APEX}}` -> ne rien toucher, suit automatiquement.
+   - Si A/AAAA vers le legacy -> mettre a jour avec les IPs du VPS.
+4. Valider. Propagation 1-15 min avec TTL 60s.
+
+### 6.5. Decommissionner le sous-domaine preview
+
+> **Critique** : dans les **30 minutes** suivant la validation de la bascule. Apres l'etape sec.6.2.B, le code se croit en prod sur tous les domaines servis -> `{{PREVIEW_HOST}}` se met aussi a servir `Allow: /` + sitemap rempli + canonical pointant vers prod = **risque duplicate content**.
+
+**Ordre strict** (sinon Caddy spamme des erreurs cert pour un host injoignable) :
+
+1. **VPS** - retirer preview de `SITE_ADDRESS` :
+   ```bash
+   ssh deploy@{{VPS_HOSTNAME_TS}}
+   cd /opt/{{PROJECT_SLUG}}
+   sudo nano .env
+   ```
+   ```diff
+   - SITE_ADDRESS={{PREVIEW_HOST}}, {{DOMAIN_APEX}}, www.{{DOMAIN_APEX}}
+   + SITE_ADDRESS={{DOMAIN_APEX}}, www.{{DOMAIN_APEX}}
+   ```
+   ```bash
+   docker compose up -d caddy
+   ```
+
+2. **Registrar** - supprimer le record A `{{PREVIEW_HOST}}` (et AAAA s'il existe).
+
+3. **Verifier** :
+   ```bash
+   dig {{PREVIEW_HOST}} +short      # vide
+   curl -I https://{{PREVIEW_HOST}}/  # timeout / cert refuse
+   ```
+
+### 6.6. Restaurer le TTL DNS a une valeur normale
+
+Une semaine apres la bascule, quand tout est stable :
+
+1. Registrar -> Zone DNS.
+2. Repasser le TTL des records A et AAAA principaux a `3600` ou `86400`.
+
+### 6.7. Verifier la bascule
+
+Apres l'etape sec.6.4 :
+
+1. **Propagation DNS** :
+   ```bash
+   for r in "" "@1.1.1.1" "@8.8.8.8"; do dig $r {{DOMAIN_APEX}} +short; done
+   # doit retourner <VPS_IPV4>
+   ```
+
+2. **HTTPS et certificat** :
+   ```bash
+   curl -I https://{{DOMAIN_APEX}}/
+   ```
+   Doit retourner `200 OK` avec un cert Let's Encrypt valide.
+
+   **Si `tlsv1 alert internal error`** : Caddy en backoff post-J-1.
+   ```bash
+   ssh deploy@{{VPS_HOSTNAME_TS}}
+   cd /opt/{{PROJECT_SLUG}}
+   docker compose restart caddy
+   docker compose logs --since 1m caddy | grep -E "obtain|certificate|challenge"
+   ```
+   Doit voir `certificate obtained successfully` en ~15s.
+
+3. **www -> apex** :
+   ```bash
+   curl -I https://www.{{DOMAIN_APEX}}/
+   # doit retourner 308 Location: https://{{DOMAIN_APEX}}/
+   ```
+
+4. **Redirects 301/308** (chaine 2 hops attendue : strip slash + redirect cible) :
+   ```bash
+   for path in <ancienne-url-1> <ancienne-url-2>; do
+     echo "--- $path ---"
+     curl -ILs https://{{DOMAIN_APEX}}$path | grep -iE "^(HTTP|location:)"
+   done
+   ```
+
+5. **robots.txt et sitemap.xml** :
+   ```bash
+   curl -s https://{{DOMAIN_APEX}}/robots.txt   # doit avoir Allow: / + Sitemap link
+   curl -s https://{{DOMAIN_APEX}}/sitemap.xml  # doit lister les URLs publiques
+   ```
+
+6. **Test mobile reel** : ouvrir le site sur telephone, verifier nav + lecture.
+
+### 6.8. Resilier l'ancien hebergement
+
+> **Quand** : a partir de J+7, une fois le TTL DNS restaure (sec.6.6) et la migration validee dans GSC. Pas avant : tant que l'ancien tourne, c'est un plan de rollback gratuit.
+
+**Prerequis** :
+
+1. **Backup complet du site legacy** (DB + uploads), archive en local. Une fois resiliation effective, tout est perdu.
+
+2. **Verifier que l'email survit** :
+   ```bash
+   dig MX {{DOMAIN_APEX}} +short
+   ```
+   Si les MX pointent vers le service email du registrar (ex. `mx*.mail.ovh.net`), c'est en general un produit separe de l'hebergement web. Verifier dans Espace client : si "MX Plan" / "Email Pro" est une ligne de facturation distincte -> OK. Si l'email est inclus dans l'hebergement web (plans historiques) -> migrer les boites vers un MX autonome **avant** la resiliation.
+
+**Procedure** : registrar -> services -> hebergement legacy -> *Resilier* -> choisir **"a l'echeance"** (gratuit, garde une fenetre de rollback jusqu'a la date de renouvellement).
+
+A **ne pas** toucher dans la meme operation :
+- Le domaine `{{DOMAIN_APEX}}` (registrar - indispensable, c'est lui qui resout vers le VPS).
+- La zone DNS (route le trafic vers le VPS).
+- Le MX Plan / Email Pro (sinon l'email casse).
+
+**Verifications post-resiliation** :
+```bash
+curl -I https://{{DOMAIN_APEX}}/        # 200 depuis Hetzner
+dig MX {{DOMAIN_APEX}} +short           # toujours mx*.mail.ovh.net (ou autre)
+dig NS {{DOMAIN_APEX}} +short           # zone DNS toujours active
+dig {{DOMAIN_APEX}} +short              # <VPS_IPV4>
+```
+
+Envoyer un email de test vers une adresse `@{{DOMAIN_APEX}}` pour confirmer que la chaine MX -> MX Plan -> boite fonctionne.
+
+---
+
+## 7. Checklist de bascule (jour J)
+
+1. **La veille (J-1)**
+   - [ ] TTL DNS legacy passe a 60s (sec.6.3).
+   - [ ] Site nouveau OK sur `{{PREVIEW_HOST}}` (formulaires, nav, mobile).
+   - [ ] `{{PREVIEW_HOST}}/robots.txt` retourne `Disallow: /`.
+   - [ ] `{{PREVIEW_HOST}}/sitemap.xml` retourne XML vide.
+   - [ ] `SITE_ADDRESS` etendu dans `.env` du VPS pour ajouter `{{DOMAIN_APEX}}` + `www.{{DOMAIN_APEX}}` (sec.6.2 etape A). Ne PAS toucher `NEXT_PUBLIC_SITE_URL`.
+   - [ ] Backup complet du site legacy (rollback safety).
+   - [ ] IP VPS notee : `<VPS_IPV4>`.
+
+2. **Bascule (J0)**
+   - [ ] Modifier `NEXT_PUBLIC_SITE_URL` dans `.env` du VPS (sec.6.2 etape B).
+   - [ ] `docker compose up -d app`.
+   - [ ] Sanity check : `curl -s https://{{PREVIEW_HOST}}/robots.txt` retourne `Allow: /` (preuve env rechargee).
+   - [ ] Registrar : update record A vers `<VPS_IPV4>`.
+   - [ ] Attendre propagation DNS (1-15 min). `dig {{DOMAIN_APEX}} +short` doit retourner `<VPS_IPV4>`.
+   - [ ] Verifier site/SSL/redirects sur le domaine prod (sec.6.7). Si TLS echoue -> `docker compose restart caddy`.
+   - [ ] **Decommissionner preview (sec.6.5) - dans les 30 min**.
+
+3. **Dans l'heure qui suit**
+   - [ ] GSC : soumettre `https://{{DOMAIN_APEX}}/sitemap.xml` (sec.4.3).
+   - [ ] GSC : demander indexation des URLs principales (sec.4.4).
+   - [ ] Tester sur mobile.
+
+4. **J+1 a J+7**
+   - [ ] Verifier dans GSC que les nouvelles URLs sont indexees.
+   - [ ] Verifier que les anciennes URLs apparaissent en "Page avec redirection".
+   - [ ] Surveiller la courbe Performances.
+   - [ ] Restaurer le TTL DNS a une valeur normale (sec.6.6).
+   - [ ] Backup complet du legacy avant resiliation.
+   - [ ] Resilier l'ancien hebergement "a l'echeance" (sec.6.8). NE PAS toucher au domaine, a la zone DNS, ni au MX Plan.
+
+5. **J+30**
+   - [ ] Comparer le trafic avant/apres dans GSC.
+   - [ ] Si chute sur les top-requetes : identifier la requete perdue et ajuster les contenus (title, description, H1, contenu textuel).
+
+---
+
+## 8. Si quelque chose tourne mal
+
+| Symptome | Cause probable | Action |
+|---|---|---|
+| Chute de ranking > 50% a J+7 | Redirects manquants ou contenu trop different | GSC "Pages -> Avec redirection" : verifier toutes les anciennes URLs. Comparer H1/contenu de chaque page avec l'ancien site. |
+| URLs non indexees a J+14 | Sitemap non soumis, robots.txt bloque, ou probleme serveur | Re-soumettre sitemap. `curl -A "Googlebot" https://{{DOMAIN_APEX}}/`. |
+| Duplicate content (preview indexe) | Variable d'env oubliee sur preview ou DNS preview pas supprime | Verifier `https://{{PREVIEW_HOST}}/robots.txt` retourne `Disallow: /`. Si du contenu preview est deja indexe : ajouter une regle `noindex` + demander suppression dans GSC. |
+| Erreurs 5xx dans GSC | Bug serveur Next.js | `docker compose logs -f app` sur le VPS. |
+| Sitemap tague "Erreur" | XML invalide ou URL inaccessible | `curl` le sitemap, verifier qu'il est valide (`xmllint`). |
+| TLS `internal error` apres bascule | Caddy en backoff post-J-1 | `docker compose restart caddy` sur le VPS (cf. runbook + sec.6.7). |
