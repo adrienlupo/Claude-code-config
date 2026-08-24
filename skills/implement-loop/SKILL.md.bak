@@ -1,0 +1,71 @@
+---
+name: implement-loop
+description: Iterate on a settled brief until every definition of done is verifiably met — build, verify with fresh context, repeat. Runs at full depth (ultracode). The deliverable is one big uncommitted, unpushed diff. Use when the user asks to run the implement loop, has a brief from the deliverable skill, or says "implement the brief".
+argument-hint: "Nothing, or a path to a brief"
+---
+
+Read the settled brief and start the loop. Nothing is handed back, nothing waits on approval. The loop has one job: make every definition of done verifiably true, and keep going until it is.
+
+## 1. The brief
+
+`.claude/deliverable.md`, unless a path was given. Its sections are `## Goal`, `## Definitions of done`, `## Verification`, and optionally `## Out of scope`. Take it as settled; never guess a goal. If none exists, or its goal is too vague to judge output against, run the `deliverable` skill first and come back with one.
+
+Say in one line which goal it holds and when it was stamped — visibility, not approval. A stamp weeks old or from another branch is a flag; if the user's ask plainly names a different goal than the brief holds, the brief is stale — run `deliverable` again rather than launch full depth at the wrong target.
+
+The brief and the assets it points at are read-only input. Do not edit them, and do not let a builder clean them away. A definition of done rewritten mid-run has not been met; it has been deleted.
+
+## 2. The definitions of done
+
+Each comes with its verification means — the URL and viewport, the booted Simulator, the endpoint and the calls, the reference to compare against. They were settled with the user in the room: do not re-pick them, do not soften them, and carry the means through verbatim to every agent that checks one.
+
+- Every check runs against the real thing — the rendered page, the running app, the live endpoint — never against the diff. Stand the one-time setup up once and keep it standing; only the per-check steps repeat.
+- Where the brief names a test suite as the instrument, the loop writes and runs it — but the scenarios stay the authority: a passing suite that no longer matches them proves nothing.
+- No verifiable definitions of done means stop and ask the user for them. A loop with nothing to verify burns rounds and converges on nothing.
+- `## Out of scope` is a wall, not a preference. Nobody is watching the run; it is the only thing holding its blast radius.
+
+## 3. You orchestrate. You never build.
+
+Context is the scarce resource, and yours is the scarcest of all: agents are disposable and replaceable, your context is neither. It is the only thing that persists across every round and the only place the whole picture lives. Spend it on judgment, never on material. When it runs out the loop does not fail loudly — it just stops being able to tell what is happening.
+
+**Never touch the codebase yourself.** Not a one-line fix, not a typo, not "faster than dispatching an agent". Every change to the repo goes through a subagent. Your own Write/Edit is for the run log and the progress page, nothing else.
+
+**Never pull material into your context.** Do not read source files, do not cat diffs, do not ask agents for their reasoning or transcripts. Agents hand back verdicts and short structured facts — met or not met, the gap named, what was touched. Needing to see the code is the signal to dispatch an agent, not to look. Give those agents a `schema` so the log holds comparable strings, not paraphrase.
+
+Expect the pull to just fix it: the fix looks small and the agent looks slow. The fix costs context you cannot get back, and you pay two rounds later — a lead that has read half the codebase can no longer tell a plateau from a mess it made itself.
+
+Keep the round log on disk, not in your head: each round's verdicts and each gap in the verifier's own words, appended to a file. That file, not your recollection, is what you read to call a plateau.
+
+## 4. Run the loop
+
+Start now. Decomposition, agent counts, round shape are yours.
+
+Run it at full depth. **This is an ultracode run every time**: orchestrate the fan-out with workflows and spend what the goal is worth. The user settled the brief and left, so depth is not theirs to re-authorise, and a loop run thin converges on nothing.
+
+One rule is prescribed above all others, because without it the loop grades its own homework: **whoever verifies a definition of done has fresh context** — never the agent that just built the thing, never one carrying a previous round's argument. A builder believes its work meets the definition; that belief is exactly what must not do the judging. Spend is not owed evenly: a verifier's judgment is the one thing standing between a plateau and a false pass, so it is often worth the heaviest model available (never fable) even where builders run cheaper. A workflow agent inherits the session's model and effort unless the script sets them, so set `effort` by role — `low` for retrieval, `medium` where the brief already settled the shape, `max` for anything judging whether a definition of done holds, reading a suite's output included. A definition that fails twice under a cheaper builder is rebuilt at `max` for the third round; if it still fails, that is a real plateau. A cheap builder that cannot solve it names the same gap every round, and that is a false plateau, not a finding.
+
+What must be true of every round:
+
+- Each check reaches the real output by the brief's means and reads the definition of done against it. Judged harshly: "close" is not met.
+- A definition met stays met. Verifiers judge the whole set they can see, not only the gap they were handed — nothing else will notice when a late round breaks an early pass.
+- The repo's existing checks — tests, typecheck, lint, build — stay green. Not a brief field, just hygiene: a diff that meets every definition while breaking the build is not done.
+- The run ends on a single fresh-context pass in which **every** definition is met at once. Passes banked across rounds are not a finish, and you never stand in for that final verifier.
+
+Keep a live progress page — the only window into a run nobody is watching.
+
+Loop until every definition holds, the run plateaus, or the user stops it. A plateau is a stop: three rounds naming substantially the same gap means a fourth will not change it. Call it by comparing the logged strings, not your impression of them — you are the agent that wants to keep going, so the record has to be able to contradict you. It is not a failure: report the standing gap, the diff so far, and the calls that are the user's — widen the scope, adjust the definition, take it as it stands. A run that ends silently is indistinguishable from one that failed.
+
+That is what must be true of the loop, not how to run it. The vagueness is deliberate: every line added here takes a decision away from you.
+
+## 5. The sweep
+
+When every definition is met, tag that state `implement-loop/<date>` — the hand-off's safety tag, taken the moment it is first true. Then one cleanup pass, fresh context, scoped to the diff's footprint: dead code out, duplication merged where builders never saw each other, defensive complexity dropped, the repo's own idiom restored. Pre-existing dead code is not its business, and neither is redesign — the definitions of done stop being the target here and become the invariant.
+
+The final verification pass then runs on the swept diff. If the sweep broke a definition, do not loop to repair it: restore the tagged state and hand that off unswept. One pass, one verification; failure costs a revert, never more rounds.
+
+## 6. The hand-off
+
+One big diff, **uncommitted and unpushed**, in the working tree of the branch the run started on. Say the definitions of done are met, say where the diff is, and stop. No commits, no branches, no PRs survive the run — only the tag.
+
+Disposable commits during the run are fine on a throwaway branch: a long unwatched loop sometimes dies mid-flight, and its last state must be recoverable by a fresh session. Once the final pass holds, move the tag to the finished state, commit that state to the throwaway branch, restore everything to the starting branch as uncommitted changes, and delete the branch. The tag is the point — an uncommitted diff is one stray `git checkout` or `git clean` from gone, and hours of full-depth work must not hang on nothing going wrong. Name it in the hand-off, and say it is the user's to delete once the diff is committed or discarded; never delete it yourself.
+
+If the user wants the diff reviewed, that is the `stack-this` skill's job — never start it yourself.

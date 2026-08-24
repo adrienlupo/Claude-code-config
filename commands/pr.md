@@ -5,11 +5,22 @@ description: Ask the user for the PR perimeter, verify it against the diff, then
 
 Current branch: !`git branch --show-current`
 Status: !`git status --short`
-Full PR diff (merge-base with main through working tree): !`git diff "$(git merge-base main HEAD 2>/dev/null || git rev-parse HEAD)"`
+Has commits: !`git rev-parse --verify -q HEAD >/dev/null 2>&1 && echo yes || echo no`
+Full PR diff (merge-base with main through working tree): !`git rev-parse --verify -q HEAD >/dev/null 2>&1 && git diff "$(git merge-base main HEAD 2>/dev/null || git rev-parse HEAD)" || echo "(no commits yet - repository is unborn)"`
 
 # PR Workflow
 
 This skill exists to counter agentic-coding drift: the PR description must come from the user's own understanding of what they shipped, verified against the code — never auto-written from the diff. The diff injected above is for YOUR comparison only; do not summarize or reveal it before the user has stated their perimeter.
+
+## Step 0 — Unborn repository bootstrap (only if "Has commits: no" above)
+
+A PR needs a base commit to diff against; with zero commits on the branch there is nothing to branch off or compare to. Handle this before anything else, and skip Steps 1-5 entirely once done:
+
+1. Tell the user plainly there are no commits yet, so this will be an initial commit directly on the current branch rather than a PR.
+2. Ask what should go into this first commit (or accept it if already stated in the /pr arguments).
+3. Review `git status --short` against that description — flag anything untracked that looks unrelated (e.g. secrets, editor config, build output) before staging.
+4. Stage the confirmed files, commit with a conventional commit message derived from the user's description, and push with upstream tracking if a remote is configured.
+5. Stop here. Do not open a PR — there is no base branch state to PR against yet.
 
 ## Step 1 — Blind perimeter question (always first)
 
