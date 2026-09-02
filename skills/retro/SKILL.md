@@ -61,6 +61,6 @@ The reviewer is fresh for the same reason the `deliverable` reviewer is: it did 
 
 ## 5. Report and discuss
 
-Save the review as `~/.claude/skills/retro/findings/<YYYY-MM-DD>-<project>-<sid first 8>.md`, with the digest's time line at the top. Before showing it, grep the earlier files in that directory for each finding's quoted sentence and cause: a finding seen before is marked **recurs (n)** and outranks a new one of the same severity — one session is one sample, and the skill edit worth making is the one two retros asked for.
+The review stays in `$D`; nothing is kept between retros — the user is the memory, and a pattern is worth fixing when they recognise it, not when a grep does.
 
 Then talk. Print the time line, the top three findings with their cause and the sentence to change, and the rewritten opening prompt if the discussion lens produced one. Take the user's pushback on each: they know what they meant, the reviewer knows what was written, and the finding is right only where the two differ. Nothing is edited during this — not a skill, not the brief, not the findings file. When the user names a change they want, it is one sentence in one file — a skill, the brief, the project's `CLAUDE.md` — made on their word after the discussion and read back to them, never a batch applied because the report said so. A retro that rewrites the skills it reviewed has become one of them.
