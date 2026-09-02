@@ -7,8 +7,9 @@ recovered verbatim - no transcription, no lossy description.
 Usage:
     python3 extract_session_images.py <transcript.jsonl> <output-dir>
 
-Find the transcript with:
-    ls -t ~/.claude/projects/$(pwd | sed 's|/|-|g')/*.jsonl | head -1
+Locate the transcript with the recipe in ../SKILL.md (section "Images"): the
+project directory name replaces every non-alphanumeric character with a dash,
+not only slashes, and falls back from the cwd to the repo root.
 """
 import base64
 import json

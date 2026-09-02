@@ -4,7 +4,7 @@ description: Settle a goal with the user — what gets built, the definitions of
 argument-hint: "A rough goal, or nothing at all"
 ---
 
-Settle what gets built and how "done" is recognised, then hand it to `implement-loop`. You do not run the loop, and you write no code — no tests, no scaffolding, nothing. A brief that contains code has already started deciding the implementation, which is exactly what this skill exists to avoid.
+Settle what gets built and how "done" is recognised, then hand it to `implement-loop`. You do not run the loop, and you write no code that builds the goal — no tests, no scaffolding, nothing. A brief that contains code for the goal has already started deciding the implementation, which is exactly what this skill exists to avoid. The one exception is verification tooling: a seed, a fixture script, a data import that stands the state under test up in one step lives in `.claude/deliverable-assets/` and is named by the means that uses it. It decides nothing about the implementation — and without it the means decides that the fixture is entered by hand, through the app's own screens, by a fresh agent on every round.
 
 Three things must leave this session extremely clear:
 
@@ -16,9 +16,9 @@ Six steps, in order: check for a leftover brief; capture every image shared in t
 
 ## Check for a leftover brief
 
-Before drafting anything, look for `.claude/deliverable.md` **and** `.claude/deliverable-assets/` in the repo, independently — this skill is the only thing that writes either path, so either one already sitting there is left over from an earlier session, not this one. The two do not always coexist: a brief can survive with its images long gone, and an assets folder can survive a brief that was deleted, never finished, or never written in the first place. Check both; do not treat the absence of one as the absence of the other.
+Before drafting anything, look for `.claude/deliverable.md` and for `.claude/deliverable-assets/`, each on its own — this skill is the only thing that writes either path, so whatever is there is left over from an earlier session, and one can outlive the other: a brief whose images are gone, or images whose brief was deleted or never finished.
 
-If the brief exists, read its stamp line (date and branch) and show it to the user with a one-line summary of its `## Goal`. If the assets folder exists, note what's in it (file count, or the definitions they were captured for if the brief is also present). Ask whether to discard what's found and start fresh or resume it as-is; never silently overwrite either and never silently treat them as belonging to the current goal. If only the assets folder is stale — no brief, or a brief that no longer references those images — ask about it on its own rather than folding it into the brief question. If nothing exists at either path, say nothing and move straight to capturing images.
+If the brief exists, show the user its stamp line (date and branch) and a one-line summary of its `## Goal`. If the assets folder exists, say what is in it — the file count, or the definitions the images were captured for when the brief is also there. Ask whether to discard or resume what you found; never overwrite either silently, and never assume it belongs to the current goal. An assets folder with no brief, or one the brief no longer references, gets its own question. If neither path exists, say nothing and move on to capturing images.
 
 ## The brief
 
@@ -54,7 +54,7 @@ For each definition of done, the means by which an agent later checks it — bec
 - A backend scenario → how to exercise the real system: the endpoint and the calls, the CLI invocation, or a test suite the loop will write and run from the scenarios. The scenarios stay the authority; any suite is just the instrument.
 - A live example or document → the URL, and what to compare.
 
-Work the means out yourself, from the repo — ask only what the repo cannot tell you: credentials, which route, which device. **When in doubt about how a definition will be verified, ask the user** — a wrong verification means fails unattended, against a definition nobody can see. Note what is one-time setup (install, boot, log in, seed) versus what repeats at every check (reload, navigate, screenshot, run), because the loop pays them at different rates.
+Work the means out yourself, from the repo — ask only what the repo cannot tell you: credentials, which route, which device. **When in doubt about how a definition will be verified, ask the user** — a wrong verification means fails unattended, against a definition nobody can see. Note what is one-time setup (install, boot, log in, seed) versus what repeats at every check (reload, navigate, screenshot, run), because the loop pays them at different rates. Both have a ceiling. Setup reaches the state under test in **one step** — a seed file, a fixture script, a deep link, a data import — never by walking the app's own screens: a fixture entered by hand is re-entered every round, by a fresh agent that has to rediscover every click. Each per-check pass reads its answer in a handful of calls, on the one screen the definition is about, with the one emulation it actually needs. Ten bullets under one definition is a QA protocol, and the loop will execute it with full rigor every round, whatever it costs.
 
 ### Out of scope
 
@@ -91,7 +91,7 @@ A goal whose definitions of done cannot be verified does not go to the loop. Bui
 
 ## Dry-run
 
-Dry-run the verification means: stand up the one-time setup, take one pass through the per-check steps, and put each definition of done on screen or on record next to the current state of the repo. It costs one cycle, and it is the only moment a wrong step is cheap — a verification that fails at round one fails unattended, and the loop grinds on comparing nothing. Fix what breaks, and write back what actually worked rather than what you planned.
+Dry-run the verification means: stand up the one-time setup, take one pass through the per-check steps, and put each definition of done on screen or on record next to the current state of the repo. It costs one cycle, and it is the only moment a wrong step is cheap — a verification that fails at round one fails unattended, and the loop grinds on comparing nothing. Fix what breaks, and write back what actually worked rather than what you planned. Record what each pass cost — tool calls and minutes, per definition — beside its means. A means that works but takes a fresh agent a quarter of an hour is not ready: rewrite it — a seed instead of a walk, one screen instead of five, a script instead of steps — and dry-run it again before the brief is stamped, because the loop pays that quarter of an hour per definition, per round, and it is the largest number in the run. Every trap met here — a toast that dismisses in seconds, a read that hangs, a selector that resets a form — goes into the means as written; a trap the loop meets instead costs it a round of false findings before it is written anywhere.
 
 ## Review
 
