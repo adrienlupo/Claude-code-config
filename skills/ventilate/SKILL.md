@@ -40,7 +40,7 @@ State the reason in `why`; these are the reasons that hold today.
 - **Probes are `sonnet/high`** with the report-everything prompt — except a probe reading what an `opus/xhigh` build produced, which runs `opus/low`: a false pass there is caught only by the gate, and the gate bounces to another Opus round at full price.
 - **The sweep is `sonnet/high`; a worktree merge or a collision reconcile is `opus/low`**, and both are followed by a probe on what they changed — the merge is the widest edit in the run and the sweep rewrites Opus code.
 - **The gate is `opus/xhigh`.** `max` is allowed once per run, and only after an `xhigh` gate has been shown wrong on the record — the `why` cites the round.
-- **Opus is spent for exactly three reasons**: a cheaper rung failed on the record, the entry scan, the final judge (merge and the post-xhigh probe are `low`, and cite their rule). An Opus call whose `why` names none of these is the drift this skill exists to catch.
+- **Opus above `low` is spent for exactly three reasons**: a cheaper rung failed on the record (`escalation`), the entry scan (`scan`), the final judge (`gate`). `opus/low` is the floor, not an escalation — the first build, a merge and the post-`xhigh` probe all sit there and carry only their `why`. An Opus call above `low` whose `why` names none of the three is the drift this skill exists to catch.
 - **Fable at `low`** is what the cost guide now names first for agent workloads in general; on the coding numbers it loses to the Opus ladder per solved task, and it answers from memory more readily at `low` — the wrong trait for a builder that must read the repo. The rule holds on evidence. Revisit it when the table changes, not before.
 
 ## 4. The dispatcher — copy it literally into every script
@@ -54,7 +54,7 @@ const run = (role, prompt, { model, effort, why, ...opts } = {}) => {   // the O
   if (!(model in PRICE)) throw new Error(`${role}: unventilated call — model must be haiku|sonnet|opus, got ${model}`)   // fable, inherit and omission all land here
   if (model === 'haiku' ? effort !== undefined : !EFFORT.includes(effort)) throw new Error(`${role}: effort ${effort} is not valid on ${model}`)
   if (!why) throw new Error(`${role}: every dispatch carries a why`)
-  if (model === 'opus' && !/^(escalation|scan|gate|merge|post-xhigh)\b/.test(why)) throw new Error(`${role}: opus needs a §3 reason — escalation|scan|gate|merge|post-xhigh — got "${why}"`)
+  if (model === 'opus' && effort !== 'low' && !/^(escalation|scan|gate)\b/.test(why)) throw new Error(`${role}: opus above low needs a §3 reason — escalation|scan|gate — got "${why}"`)
   if (effort === 'max' && (role !== 'gate' || tally.max > 0 || !/R\d+/.test(why))) throw new Error(`${role}: max is once per run, gate only, citing the round an xhigh gate was wrong`)
   if (effort === 'max') tally.max++
   tally[model]++; tally.calls.push(`${role} ${model}/${effort ?? '-'} — ${why}`)
@@ -78,7 +78,7 @@ P=~/.claude/projects/$(pwd | sed 's#/#-#g'); SID=$(ls -t "$P"/*.jsonl | head -1 
 find "$P/$SID/subagents" -name 'agent-*.jsonl' -exec cat {} + | jq -r 'select(.type=="assistant")|.message.model' | sed 's/claude-//;s/-[0-9]\{8\}$//' | sort | uniq -c | awk '{printf "%s %s ", $2, $1}'; echo
 ```
 
-  Write it to the run log as `ventilation: <histogram>` before the log is renamed. Any `fable` count above zero is a defect the hand-off reports by name, with the transcript ids — it means a call was dispatched outside `run()`. The `retro` skill reads the same field, so a run that hid its ventilation shows up there too.
+  Write it to the run log as `ventilation: <histogram>` before the log is renamed. Any `fable` count above zero is a defect the hand-off reports by name, with the transcript ids — it means a call was dispatched outside `run()`. `retro` reads the run log, so a missing `ventilation:` line is visible there too.
 
 ## 6. What the record must let a reader judge
 
