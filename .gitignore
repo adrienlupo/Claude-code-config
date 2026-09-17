@@ -3,7 +3,10 @@
 
 # Then explicitly include what we want to track
 !.gitignore
-!claude.md
+!CLAUDE.md
+!settings.json
+!rules/
+!rules/**
 !commands/
 !commands/**
 !agents/
@@ -12,6 +15,7 @@
 !agent-memory/**
 !skills/
 !skills/**
+skills/synced/
 !notify.sh
 !settings.local.json
 

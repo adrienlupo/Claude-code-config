@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Skill(*)",
+      "Read(~)",
+      "Read(~/**)",
+      "Grep(~)",
+      "Grep(~/**)",
+      "WebSearch",
+      "WebFetch(domain:api.anthropic.com)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:claude.ai)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:gitlab.com)",
+      "WebFetch(domain:bitbucket.org)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:npmjs.com)",
+      "WebFetch(domain:yarnpkg.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:www.pypi.org)",
+      "WebFetch(domain:files.pythonhosted.org)",
+      "WebFetch(domain:rubygems.org)",
+      "WebFetch(domain:ruby-lang.org)",
+      "WebFetch(domain:rubyonrails.org)",
+      "WebFetch(domain:hub.docker.com)",
+      "WebFetch(domain:www.docker.com)",
+      "WebFetch(domain:cloud.google.com)",
+      "WebFetch(domain:azure.com)",
+      "WebFetch(domain:microsoft.com)",
+      "WebFetch(domain:www.microsoft.com)",
+      "WebFetch(domain:developer.mozilla.org)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:json-schema.org)",
+      "WebFetch(domain:www.schemastore.org)",
+      "WebFetch(domain:modelcontextprotocol.io)",
+      "WebFetch(domain:nodejs.org)",
+      "WebFetch(domain:react.dev)",
+      "WebFetch(domain:nextjs.org)",
+      "WebFetch(domain:tailwindcss.com)",
+      "WebFetch(domain:typescriptlang.org)",
+      "WebFetch(domain:expressjs.com)",
+      "WebFetch(domain:vitejs.dev)",
+      "WebFetch(domain:notion.so)",
+      "WebFetch(domain:developers.notion.com)",
+      "WebFetch(domain:hashicorp.com)",
+      "WebFetch(domain:apache.org)",
+      "WebFetch(domain:eclipse.org)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "mcp__github__get_me",
+      "mcp__github__get_commit",
+      "mcp__github__get_file_contents",
+      "mcp__github__get_tag",
+      "mcp__github__get_label",
+      "mcp__github__get_latest_release",
+      "mcp__github__get_release_by_tag",
+      "mcp__github__get_team_members",
+      "mcp__github__get_teams",
+      "mcp__github__issue_read",
+      "mcp__github__pull_request_read",
+      "mcp__github__list_issues",
+      "mcp__github__list_issue_types",
+      "mcp__github__list_pull_requests",
+      "mcp__github__list_commits",
+      "mcp__github__list_branches",
+      "mcp__github__list_tags",
+      "mcp__github__list_releases",
+      "mcp__github__search_code",
+      "mcp__github__search_issues",
+      "mcp__github__search_pull_requests",
+      "mcp__github__search_repositories",
+      "mcp__github__search_users",
+      "mcp__notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__notion__notion-search",
+      "mcp__notion__notion-get-comments",
+      "mcp__notion__notion-get-teams",
+      "mcp__notion__notion-get-users",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__select_page",
+      "mcp__chrome-devtools__list_console_messages",
+      "mcp__chrome-devtools__get_console_message",
+      "mcp__chrome-devtools__list_network_requests",
+      "mcp__chrome-devtools__get_network_request",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__wait_for",
+      "mcp__chrome-devtools__performance_start_trace",
+      "mcp__chrome-devtools__performance_stop_trace",
+      "mcp__chrome-devtools__performance_analyze_insight",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__fill",
+      "mcp__figma-desktop__get_design_context",
+      "mcp__figma-desktop__get_metadata",
+      "mcp__figma-desktop__get_screenshot",
+      "mcp__figma-desktop__get_variable_defs",
+      "mcp__figma-desktop__get_figjam",
+      "mcp__figma-desktop__create_design_system_rules",
+      "mcp__expo-mcp__automation_tap",
+      "mcp__expo-mcp__automation_take_screenshot",
+      "mcp__expo-mcp__automation_find_view",
+      "mcp__expo-mcp__collect_app_logs",
+      "mcp__expo-mcp__open_devtools"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Read(~/.aws/**)"
+    ],
+    "defaultMode": "auto",
+    "additionalDirectories": [
+      "~/code/",
+      "~/.claude/"
+    ]
+  },
+  "model": "opus[1m]",
+  "skillOverrides": {
+    "seo-audit": "off",
+    "ci-cd-automation": "off",
+    "proposition-qraft": "off"
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/notify.sh \"Claude attend votre réponse\""
+          }
+        ]
+      },
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/notify.sh \"Claude demande une permission\""
+          }
+        ]
+      },
+      {
+        "matcher": "elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/notify.sh \"Claude vous pose une question\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/notify.sh \"Tâche terminée\""
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash $HOME/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": true,
+    "mcp-apps@mcp-apps": false,
+    "claude-md-management@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false,
+    "pyright-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "claude-seo@agricidaniel-claude-seo": false,
+    "expo@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "addy-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "addyosmani/agent-skills"
+      }
+    },
+    "agricidaniel-claude-seo": {
+      "source": {
+        "source": "github",
+        "repo": "AgriciDaniel/claude-seo"
+      }
+    }
+  },
+  "outputStyle": "Concise",
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "raw.githubusercontent.com",
+        "*.npmjs.org",
+        "registry.yarnpkg.com",
+        "brew.sh",
+        "formulae.brew.sh",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "mcp.mermaid.ai"
+      ],
+      "allowLocalBinding": true
+    },
+    "excludedCommands": [
+      "docker",
+      "gh",
+      "git",
+      "uv"
+    ]
+  },
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": [
+      "Fesses au fond du siège",
+      "Pieds à plat au sol",
+      "Bas du dos plaqué contre le dossier",
+      "Lombaires soutenues",
+      "Épaules relâchées, loin des oreilles",
+      "Omoplates légèrement en arrière",
+      "Menton rentré (double menton léger)",
+      "Oreilles au-dessus des épaules",
+      "Haut de l'écran au niveau des yeux",
+      "Coudes à 90° près du corps",
+      "Poignets droits, pas cassés",
+      "Souris proche du clavier",
+      "Respirer par le ventre",
+      "Décontracter la mâchoire",
+      "Langue posée au palais, détendue",
+      "Desserrer les dents (lèvres fermées, dents écartées)",
+      "Relâcher le front et les sourcils",
+      "Détendre le contour des yeux",
+      "Imagine un fil qui tire le sommet du crâne vers le plafond",
+      "Épaules fondent vers le sol comme de la cire",
+      "Poitrine ouverte, cœur vers l'avant",
+      "Micro-pause toutes les 30–45 min"
+    ]
+  },
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "high"
+    }
+  },
+  "tui": "fullscreen",
+  "autoMemoryEnabled": false,
+  "autoDreamEnabled": false,
+  "skipWorkflowUsageWarning": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": true
+}
