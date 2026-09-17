@@ -1,14 +1,14 @@
 ---
 name: stack-this
-description: Take a large diff — typically the uncommitted output of an implement loop — and slice it into a stack of dependent GitHub PRs so it can be reviewed in readable pieces. Use when the user says "stack this", has a big diff or oversized branch to split for review, or wants stacked PRs from finished work.
-argument-hint: "Nothing (current working-tree diff), or a branch/range"
+description: Take a large diff — typically the hand-off commit of an implement loop — and slice it into a stack of dependent GitHub PRs so it can be reviewed in readable pieces. Use when the user says "stack this", has a big diff or oversized branch to split for review, or wants stacked PRs from finished work.
+argument-hint: "Nothing (the branch's last commit, or the working-tree diff), or a branch/range"
 ---
 
 Take a finished diff and slice it into a stack of pull requests a reviewer can actually read. This skill does not build or change the work — the diff is done; only its packaging for review changes. If the diff is not done, this is the wrong skill.
 
 ## The input
 
-The working-tree diff by default — uncommitted, unpushed, exactly as `implement-loop` leaves it. A branch or range, if one was given. Read the whole diff before slicing: the cut lines come from what the diff actually contains, not from how the work happened to be built.
+By default the last commit on the current branch — one squashed commit, pushed, exactly as `implement-loop` leaves it — or the working-tree diff when there is one. A branch or range, if one was given. Read the whole diff before slicing: the cut lines come from what the diff actually contains, not from how the work happened to be built.
 
 Only where the work ships by pull request — a git repo with a remote the user reviews in. A scratch build or a repo with no remote has nothing to stack: say so and stop.
 

@@ -1,10 +1,10 @@
 ---
 name: deliverable
-description: Settle a goal with the user — what gets built, the definitions of done that prove it, and how each one gets verified — capture any image shared in the session as a file, write it all to a brief, have a fresh Fable agent review it adversarially, then hand it to the implement-loop skill. Use before an implement loop, or when a goal is too fuzzy to judge output against.
+description: Settle a goal with the user — what gets built, the definitions of done that prove it, and how each one gets verified — capture any image shared in the session as a file, write it all to a brief, have a fresh Fable agent review it adversarially, then commit and push it on a non-default branch and hand it to the implement-loop skill. Use before an implement loop, or when a goal is too fuzzy to judge output against.
 argument-hint: "A rough goal, or nothing at all"
 ---
 
-Settle what gets built and how "done" is recognised, then hand it to `implement-loop`. You do not run the loop, and you write no code that builds the goal — no tests, no scaffolding, nothing. A brief that contains code for the goal has already started deciding the implementation, which is exactly what this skill exists to avoid. The one exception is verification tooling: a seed, a fixture script, a data import that stands the state under test up in one step lives in `.claude/deliverable-assets/` and is named by the means that uses it. It decides nothing about the implementation — and without it the means decides that the fixture is entered by hand, through the app's own screens, by a fresh agent on every round.
+Settle what gets built and how "done" is recognised, then hand it to `implement-loop`. You do not run the loop, and you write no code that builds the goal — no tests, no scaffolding, nothing. A brief that contains code for the goal has already started deciding the implementation, which is exactly what this skill exists to avoid. The one exception is verification tooling: a seed, a fixture script, a data import that stands the state under test up in one step lives in `.deliverable/assets/` and is named by the means that uses it. It decides nothing about the implementation — and without it the means decides that the fixture is entered by hand, through the app's own screens, by a fresh agent on every round.
 
 Three things must leave this session extremely clear:
 
@@ -12,13 +12,13 @@ Three things must leave this session extremely clear:
 2. **Definitions of done** — the concrete things that define when the goal is reached.
 3. **A verification means for each one** — how an agent, later, puts reality next to the definition and reads the answer.
 
-Six steps, in order: check for a leftover brief; capture every image shared in the session as a file; draft the goal, the definitions of done and what is out of scope; grill the user on them; derive and dry-run the verification means and write back what worked; have a fresh agent review the whole brief adversarially, apply what it finds, and confirm.
+Six steps, in order: check for a leftover brief; capture every image shared in the session as a file; draft the goal, the definitions of done and what is out of scope; grill the user on them; derive and dry-run the verification means and write back what worked; have a fresh agent review the whole brief adversarially, apply what it finds, confirm, and commit and push.
 
 ## Check for a leftover brief
 
-Before drafting anything, look for `.claude/deliverable.md` and for `.claude/deliverable-assets/`, each on its own — this skill is the only thing that writes either path, so whatever is there is left over from an earlier session, and one can outlive the other: a brief whose images are gone, or images whose brief was deleted or never finished.
+Before drafting anything, look for `.deliverable/brief.md` and for `.deliverable/assets/`, each on its own — this skill is the only thing that writes either path, so whatever is there is left over from an earlier session, and one can outlive the other: a brief whose images are gone, or images whose brief was deleted or never finished. A leftover after a loop ran means that run never reached its hand-off, which is the only thing that removes the folder (implement-loop §8).
 
-If the brief exists, show the user its stamp line (date and branch) and a one-line summary of its `## Goal`. If the assets folder exists, say what is in it — the file count, or the definitions the images were captured for when the brief is also there. Ask whether to discard or resume what you found; never overwrite either silently, and never assume it belongs to the current goal. An assets folder with no brief, or one the brief no longer references, gets its own question. If neither path exists, say nothing and move on to capturing images.
+If the brief exists, show the user its stamp line (date and branch) and a one-line summary of its `## Goal`. If the assets folder exists, say what is in it — the file count, or the definitions the images were captured for when the brief is also there. Ask whether to discard or resume what you found; never overwrite either silently, and never assume it belongs to the current goal. An assets folder with no brief, or one the brief no longer references, gets its own question. A leftover that is tracked (`git ls-files --error-unmatch .deliverable/brief.md`) was committed by an earlier hand-off and sits in this branch's history: discarding it is `git rm -r .deliverable` and a commit, not a delete — removed only on disk it comes back with the next clone, and the loop that finds it builds the old goal. If neither path exists, say nothing and move on to capturing images.
 
 ## The brief
 
@@ -74,7 +74,7 @@ for P in "$(pwd)" "$(git rev-parse --show-toplevel 2>/dev/null)"; do   # cwd, th
 done
 [ -n "$DIR" ] || { echo "no transcript for $(pwd)"; exit 1; }   # never fall back to the newest dir anywhere
 python3 ~/.claude/skills/deliverable/scripts/extract_session_images.py \
-  "$(ls -t $DIR/*.jsonl | head -1)" .claude/deliverable-assets/
+  "$(ls -t $DIR/*.jsonl | head -1)" .deliverable/assets/
 ```
 
 Zero extracted means the transcript has not flushed yet, not that nothing was shared — retry once, then ask the user to save it themselves. If none was shared at all, ask once whether one exists.
@@ -83,7 +83,7 @@ An image already on disk goes to the same folder if it lives outside the repo. S
 
 ## Grill
 
-Write what you have to `.claude/deliverable.md`, then invoke `grill-me` with that path. Its job is removing ambiguity — aim it at the *what*, and at the definitions of done above all.
+Write what you have to `.deliverable/brief.md`, then invoke `grill-me` with that path. Its job is removing ambiguity — aim it at the *what*, and at the definitions of done above all.
 
 Never settle the *how*: do not prescribe it, do not interview for it. It strips decisions from the loop before it starts. Verification means are the exception, and they are yours to derive, not the user's to supply — the user only confirms them when you are in doubt.
 
@@ -120,6 +120,14 @@ Then send it back over the revised brief for a confirmation pass, and aim that p
 
 ## Hand off
 
-Check whether the brief and its assets are tracked — `git ls-files --error-unmatch .claude/deliverable.md`, not `git check-ignore`, which answers a different question: a fresh file under an unignored `.claude/` is neither tracked nor ignored. Untracked, they survive branch switches but not `git clean -fdx`. Say which in the brief; either way the loop treats them as read-only input.
+The brief leaves this session on GitHub, not on this disk: the loop may run on a cloud agent that has nothing but the repository, and a brief it cannot check out is a brief it never reads. So the brief and its assets are committed and pushed — on a branch that is **not** the repo's default, because the loop removes them at its own hand-off (implement-loop §8), and a brief that ever reached the default branch shows up in the final PR as a deletion instead of not at all.
 
-Confirm with the user. This is the last gate before anything runs: `implement-loop` then reads the brief from disk, takes the definitions of done as settled and starts straight away. Nothing comes back to approve.
+Before anything is committed, check that the repo will take the path: `git check-ignore -q .deliverable && echo ignored`. Ignored means a rule covers it — say which and stop; never `git add -f` around a rule, that only hides the brief from the next clone. Then the branch: if the current one is the default (`origin/HEAD`), propose one named after the goal and create it, and rewrite the stamp line's branch to match — the loop reads a brief stamped with another branch as stale. Otherwise the current branch is the one, and the stamp line already carries it. Other uncommitted changes in the tree are the user's and stay out of the commit — name them, because the loop refuses to start on a dirty tree.
+
+Confirm with the user: the brief, the branch name, and the push. This is the last gate before anything runs: `implement-loop` then reads the brief from disk, takes the definitions of done as settled and starts straight away. Nothing comes back to approve. On yes:
+
+```sh
+git add .deliverable && git commit -m "deliverable: <the goal, one line>" && git push -u origin HEAD
+```
+
+Only `.deliverable/` goes in — `git add` with the path, never `-A`. Report the branch and the commit, and that the loop, wherever it runs, starts from that branch and hands off as one pushed commit on it, with the folder removed in that commit.
