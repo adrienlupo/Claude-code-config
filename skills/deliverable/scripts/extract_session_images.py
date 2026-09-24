@@ -5,27 +5,50 @@ A pasted image is stored in the session transcript as a base64 block, so it can 
 recovered verbatim - no transcription, no lossy description.
 
 Usage:
+    python3 extract_session_images.py <output-dir>                     # this session
     python3 extract_session_images.py <transcript.jsonl> <output-dir>
 
-Locate the transcript with the recipe in ../SKILL.md (section "Images"): the
-project directory name replaces every non-alphanumeric character with a dash,
-not only slashes, and falls back from the cwd to the repo root.
+With no transcript given, it takes the newest transcript of the project directory
+for the cwd, then for the repo root. The directory name replaces every
+non-alphanumeric character of the path with a dash, not only slashes.
 """
+from __future__ import annotations
+
 import base64
 import json
+import os
 import pathlib
+import re
+import subprocess
 import sys
 
 EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 
 
+def find_transcript() -> pathlib.Path | None:
+    projects = pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR", pathlib.Path.home() / ".claude")) / "projects"
+    root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    for path in (os.getcwd(), root):
+        if not path:
+            continue
+        found = sorted((projects / re.sub(r"[^a-zA-Z0-9]", "-", path)).glob("*.jsonl"), key=lambda p: p.stat().st_mtime)
+        if found:
+            return found[-1]
+    return None  # never fall back to the newest transcript of another project
+
+
 def main() -> int:
-    if len(sys.argv) != 3:
+    if len(sys.argv) == 2:
+        src, out = find_transcript(), pathlib.Path(sys.argv[1])
+        if src is None:
+            print(f"no transcript found for {os.getcwd()}", file=sys.stderr)
+            return 1
+    elif len(sys.argv) == 3:
+        src, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+    else:
         print(__doc__.strip(), file=sys.stderr)
         return 2
-
-    src = pathlib.Path(sys.argv[1])
-    out = pathlib.Path(sys.argv[2])
+    print(f"transcript: {src}", file=sys.stderr)
     out.mkdir(parents=True, exist_ok=True)
 
     n = 0
