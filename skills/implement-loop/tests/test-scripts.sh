@@ -20,7 +20,7 @@ ok "loop refuses a dirty tree" "echo x > d.txt; ! $ST; rm d.txt"
 ok "loop fresh start" "$ST | grep -q 'mode: fresh'"
 echo v2 > app.txt; mkdir -p .implement-loop/replay; echo drive > .implement-loop/replay/D1; git add -A; git commit -qm r1
 git switch -q main; ok "loop refuses resume from another branch (local wip exists)" "! $ST"
-git switch -q feat/x; ok "loop resumes from its own branch" "$ST | grep -q 'mode: resume'"
+git switch -q feat/x; echo 'trap: t1' >> $G/implement-loop.log; ok "loop resumes from its own branch and shows its traps" "[ \$($ST | grep -c -e '^mode: resume\$' -e '^trap: t1\$') = 2 ]"
 ok "hand-off refuses without a message" "! $HO"
 printf 'G\n\nD1 met\n' > $G/implement-loop.log.msg; TAG=$(sed -n 's/^tag: //p' $G/implement-loop.log)
 ok "hand-off happy path" "$HO"

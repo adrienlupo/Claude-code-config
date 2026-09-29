@@ -39,7 +39,7 @@ Opus 5.5 at `xhigh` scores ~1.4 points above `high` for 2.5× the cost. Effort i
 
 - **Builders climb `opus/low` → `opus/high` → `opus/xhigh`**, one rung per failed attempt; failing at the top is the plateau. Start higher only when the task says why. It is the cheapest measured policy on checkable work, and it needs a check that fails bad work.
 - **Judges are `opus`** — the docs' default for agent work is Opus 5.5 at `medium`. A false pass is a loop's costliest error, so the gate gets the top rung.
-- **Captures are `haiku`**: run a command, the suite or a replay (browser included), hand back the artifact. A drive that must find its own way, or a capture that failed twice, goes to `opus/low`. Keep Haiku's input small.
+- **Captures are `haiku`**: run a command, the suite or a replay script (browser included), hand back the artifact. A drive with no script to replay, or a capture that failed once, goes to `opus/low`. Keep Haiku's input small.
 - **Sonnet has no default role**: `opus/low` beats it on score at a seventh of the cost per solved task.
 - **Fable is not a worker, and `run()` refuses it**: Opus 5.5 matched it at a fifth of the cost. The docs' one case for Fable — Opus 5.5 at higher effort still falls short — is a plateau, and plateaus go back to the user.
 - **`max` is not a rung**: it "may show diminishing returns and is prone to overthinking".

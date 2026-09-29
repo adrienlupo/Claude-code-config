@@ -33,18 +33,19 @@ Stand the check environment up once — local, disposable — and write its addr
 Start with one fresh agent checking every definition against the repo as it is; that sizes the run. Then, each round:
 
 - **Build** what fails. A builder gets its definitions, the out-of-scope wall, the setup's address and — on a retry — last round's gap for that definition. It doesn't push, run destructive commands, install beyond need, write outside the repo, weaken a test, or touch `.deliverable/`. A retry climbs `ventilate`'s ladder *and* carries the gap.
-- **Check**, once every builder has returned, whatever the change could affect — decided by a fresh agent from `git status --porcelain`, never by the builder; unsure means include. The repo's own tests, typecheck, lint and build run every round.
-- **Log** one line per definition checked — `R<n> <defId> pass|fail | gap in the checker's words, ≤15 words | paths` — update `round:`, and commit the round on the wip branch.
+- **Check**, once every builder has returned, what was built and each passed definition a changed path reaches — named by a fresh agent from `git status --porcelain`, never by you or the builder; the rest stay passed until the gate. The repo's own tests, typecheck, lint and build run every round.
+- **Log** one line per definition checked — `R<n> <defId> pass|fail|unchecked | gap in the checker's words, ≤15 words | paths` — update `round:`, and commit the round on the wip branch.
 
 How a definition is checked is what makes the loop worth running:
 
 - **Fresh context** — never the builder, never one carrying last round's argument.
 - **The real output** — the page, the app, the endpoint, the query result — never the diff.
-- **Capture apart from judgment** — a cheap agent runs the check and hands back the artifact itself (screenshot, response, suite output) under `.implement-loop/r<n>/`; the judge gets the definition, its check and the artifact, nothing else, and tries to **refute**.
+- **Capture apart from judgment** — a cheap agent runs the check and hands back the artifact itself (screenshot, response, suite output) under `.implement-loop/r<n>/`; the judge gets the definition, its check and the artifact, nothing else, and tries to **refute**. A capture's prompt is its definition and check, this round's one addition and the log's `trap:` lines — what the environment taught the run — never the rounds before.
+- **Fail only on an artifact that contradicts the definition**, at the gate too. A clause no artifact reached is `unchecked`: it gets one capture before the next gate and, still unreached, is handed off as unverified, never as met. A flaw the definition doesn't forbid passes, named on its log line; neither buys a build round.
 - **Qualitative definitions are judged blind** — the build's output and the reference, unlabelled, scored against the bar the brief sets.
-- A browser drive that works is saved as `.implement-loop/replay/<defId>` and replayed in later rounds.
+- A browser drive replays in later rounds only as a plain script that re-runs without an MCP, saved as `.implement-loop/replay/<defId>`; a drive through an MCP is re-driven every round.
 
-**Gate** — the only successful end: one fresh agent judges the **whole set at once** on fresh artifacts, with the repo's own checks green. Passes banked across rounds don't count, and you never stand in for the gate.
+**Gate** — the only successful end: one fresh agent judges the **whole set at once** on fresh artifacts, with the repo's own checks green. Passes banked in the rounds don't count here, and you never stand in for the gate.
 
 ## 4. Stopping
 
@@ -56,7 +57,7 @@ You never touch the code, and you never pull source, diffs or transcripts into y
 
 ## 6. Hand-off
 
-Append `ventilate`'s `ventilation:` line to the log and write the commit message to `$LOG.msg` — the goal as subject; one line per definition, met or its gap; the log's `tag:`. Then:
+Append `ventilate`'s `ventilation:` line to the log and write the commit message to `$LOG.msg` — the goal as subject; one line per definition, met, unverified, or its gap; the log's `tag:`. Then:
 
 ```sh
 ~/.claude/skills/implement-loop/scripts/handoff.sh
@@ -64,4 +65,4 @@ Append `ventilate`'s `ventilation:` line to the log and write the commit message
 
 It pushes the run tag (every round, the brief, the log), lays the run down as **one commit on the starting branch** with `.deliverable/` removed, pushes it, and cleans up. If it stops, follow only the recovery it prints — the work is safe in the tag. Then tear the setup down.
 
-Report for someone who never saw the run: each definition met or not, gaps in plain words; the commit and branch; the tag, theirs to delete once merged; and if unfinished, their calls — widen the scope, adjust a definition, run longer, or take it as it stands. Open no PR; that's `stack-this`.
+Report for someone who never saw the run: each definition met, unverified or not, gaps in plain words; the commit and branch; the tag, theirs to delete once merged; and if unfinished, their calls — widen the scope, adjust a definition, run longer, or take it as it stands. Open no PR; that's `stack-this`.
