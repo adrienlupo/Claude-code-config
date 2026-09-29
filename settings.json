@@ -192,20 +192,29 @@
     "pyright-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "claude-seo@agricidaniel-claude-seo": false,
-    "expo@claude-plugins-official": true
+    "expo@claude-plugins-official": true,
+    "mattpocock-skills@mattpocock": true
   },
   "extraKnownMarketplaces": {
     "addy-agent-skills": {
       "source": {
         "source": "github",
         "repo": "addyosmani/agent-skills"
-      }
+      },
+      "autoUpdate": true
     },
     "agricidaniel-claude-seo": {
       "source": {
         "source": "github",
         "repo": "AgriciDaniel/claude-seo"
       }
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      },
+      "autoUpdate": true
     }
   },
   "outputStyle": "Concise",
@@ -267,12 +276,16 @@
   "modelSettings": {
     "claude-opus-5": {
       "effortLevel": "high"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "xhigh"
     }
   },
   "tui": "fullscreen",
   "autoMemoryEnabled": false,
   "autoDreamEnabled": false,
   "skipWorkflowUsageWarning": true,
+  "switchModelsOnFlag": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": true
