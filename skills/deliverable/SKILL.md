@@ -38,7 +38,7 @@ A handful of definitions. Each costs a check, so add one only when its absence w
 Each gets a check an agent can run without you:
 
 - a test suite written from the scenarios, a `curl`, an SQL query, a CLI call;
-- a browser check — DevTools or Playwright: the URL, the viewport, what to read;
+- a browser check: the URL, the viewport, the state, what to read;
 - a Simulator on the right screen;
 - **qualitative** (design, copy, feel): a blind A/B — a judge scores the build against the reference without knowing which is which, and the bar it must reach is set here.
 
