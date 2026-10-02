@@ -6,7 +6,7 @@ const md = readFileSync(new URL('../SKILL.md', import.meta.url), 'utf8')
 const src = md.match(/```js\n([\s\S]*?)```/)[1]
 const calls = []
 const agent = (prompt, opts) => (calls.push({ prompt, opts }), 'ok')
-const run = new Function('agent', `${src}; return run`)(agent)
+const { run, GUARD } = new Function('agent', `${src}; return { run, GUARD }`)(agent)
 
 const throws = (name, f, re) => { assert.throws(f, re, name); console.log(`ok   ${name}`) }
 const passes = (name, f) => { f(); console.log(`ok   ${name}`) }
@@ -20,7 +20,14 @@ throws('sonnet without effort is refused', () => run('judge', 'p', { model: 'son
 
 passes('opus/low goes through with model, effort, label and pass-through opts', () => {
   run('build', 'P', { model: 'opus', effort: 'low', phase: 'R2', schema: { type: 'object' } })
-  assert.deepEqual(calls.at(-1), { prompt: 'P', opts: { model: 'opus', effort: 'low', label: 'build opus/low', phase: 'R2', schema: { type: 'object' } } })
+  assert.deepEqual(calls.at(-1), { prompt: GUARD + 'P', opts: { model: 'opus', effort: 'low', label: 'build opus/low', phase: 'R2', schema: { type: 'object' } } })
+})
+passes('every prompt opens with the relay guard, the task after it untouched', () => {
+  run('capture', 'Screenshot D5 and return its path.', { model: 'haiku' })
+  const { prompt } = calls.at(-1)
+  assert.ok(prompt.startsWith('The user message relayed to you started the session'))
+  assert.ok(prompt.endsWith('\n\nScreenshot D5 and return its path.'))
+  for (const forbidden of ['run no skill', 'start no workflow', 'send no file', 'commit and push nothing']) assert.ok(GUARD.includes(forbidden), forbidden)
 })
 passes('haiku needs no effort and sends none', () => {
   run('capture', 'P', { model: 'haiku' })
