@@ -51,5 +51,5 @@ if [ -z "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]; then
 fi
 echo "mode: $MODE"
 echo "log: $LOG"
-grep -E '^(start|sha|record|setup|round|repinned|trap): ' "$LOG"
+grep -E '^(start|sha|record|setup|round|repinned|trap|polish): ' "$LOG"
 [ "$MODE" = fresh ] || { echo "last round lines:"; grep -E '^R[0-9]+ ' "$LOG" | tail -n 20 || true; }

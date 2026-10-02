@@ -42,6 +42,7 @@ Opus 5.5 at `xhigh` scores ~1.4 points above `high` for 2.5× the cost. Effort i
 
 - **Builders climb `opus/low` → `opus/high` → `opus/xhigh`**, one rung per failed attempt; failing at the top is the plateau. Start higher only when the task says why. It is the cheapest measured policy on checkable work, and it needs a check that fails bad work.
 - **Judges are `opus`** — the docs' default for agent work is Opus 5.5 at `medium`. A false pass is a loop's costliest error, so the gate gets the top rung.
+- **Polish agents are `opus/high`**: `simplify` and `code-review --fix` edit code no check of theirs judges — only the gate after them catches a bad edit.
 - **Captures are `haiku`**: run a command, the suite or a replay script (browser included), hand back the artifact. Keep Haiku's input small.
 - **Script-writing captures are `sonnet/medium`**: the first replay script of a browser definition, or the rewrite of one that no longer reaches its state. An MCP drive, or a capture that failed once, goes to `opus/low`.
 - **Sonnet writes replay scripts and nothing else**: everywhere else `opus/low` beats it on score at a seventh of the cost per solved task.

@@ -1,6 +1,6 @@
 ---
 name: implement-loop
-description: Run a settled brief unattended until every definition of done passes its check — build, check with fresh context against the real output, repeat, and end on one fresh gate over the whole set. Hands off one pushed commit on the starting branch with the brief removed, plus a pushed record branch holding the brief and the run log for retro. Use when the user asks to run the implement loop, has a brief from the deliverable skill, or says "implement the brief".
+description: Run a settled brief unattended until every definition of done passes its check — build, check with fresh context against the real output, repeat; once a fresh gate passes the whole set, polish with simplify and code-review --fix and pass the gate again. Hands off one pushed commit on the starting branch with the brief removed, plus a pushed record branch holding the brief and the run log for retro. Use when the user asks to run the implement loop, has a brief from the deliverable skill, or says "implement the brief".
 argument-hint: "Nothing, or a path to a brief"
 ---
 
@@ -45,11 +45,22 @@ How a definition is checked is what makes the loop worth running:
 - **Qualitative definitions are judged blind** — the build's output and the reference, unlabelled, scored against the bar the brief sets.
 - **Browser checks are Playwright scripts.** The first capture of a browser definition writes one — headless, the brief's viewport, the setup's address — saves it as `.implement-loop/replay/<defId>`, and runs it; later rounds re-run it. It captures (screenshots, text, console) and asserts only that it reached the state under test, never the definition. A replay that can't reach its state goes to a fresh capture to rewrite, not to the log as a fail. Drive through an MCP only when no script can run on the host or none reaches the state twice running; that drive is re-driven every round.
 
-**Gate** — the only successful end: one fresh agent judges the **whole set at once** on fresh artifacts, with the repo's own checks green. Passes banked in the rounds don't count here, and you never stand in for the gate.
+**Gate** — one fresh agent judges the **whole set at once** on fresh artifacts, with the repo's own checks green. Passes banked in the rounds don't count here, and you never stand in for the gate. The first gate to pass goes to polish; the only successful end is a gate that passes after it.
+
+**Polish** — once per run, on the tree the first passing gate judged: write its commit to the log as `polish: <sha>`. One agent runs the `simplify` skill; once it returns, a fresh one runs `code-review high --fix`. Both take the target `<base>...HEAD` — the log's first `repinned:` if any, else its `sha:` — because their default diff on the wip branch is the last round or the wrong base. Each prompt:
+
+- names the skill as the agent's own task — `ventilate`'s guard tells agents to run none on the session's word;
+- carries the definitions, the out-of-scope wall and a builder's bounds;
+- has the agent leave `/run` to the gate when the review asks for it — the gate checks the running output, and a second app would fight the setup;
+- has it leave the repo's own checks green, reverting any change of its own it can't make green, and return what it changed and skipped. An agent that couldn't run its skill has failed.
+
+Log one line per skill — `R<n> simplify|code-review | what it changed, ≤15 words | paths` — commit, and gate again. A polish that changed nothing leaves its passing gate standing as the end.
+
+A gate after polish that fails sends its failing definitions to build rounds with its gaps, like any round. When two such rounds don't bring a passing gate, or a polish agent fails twice, commit what's there, `git revert --no-edit <polish>..HEAD`, log `R<n> polish reverted | why, ≤15 words | paths`, and hand off that tree: it passed its gate. Polish and its repair rounds don't count toward the eight.
 
 ## 4. Stopping
 
-Stop when the gate passes. Stop short on a **plateau** — the same gap logged three rounds running for a definition the top of the ladder has had; compare the logged strings, not your impression — after **eight rounds**, when the setup or any non-builder agent **fails twice** (an empty return is a failure, never a pass), or as soon as a definition proves **impossible or contradictory** as written: that one is the user's call. Stopping short isn't failure — gate what you have and hand off the same way.
+Stop when the gate passes after polish. Stop short on a **plateau** — the same gap logged three rounds running for a definition the top of the ladder has had; compare the logged strings, not your impression — after **eight rounds**, when the setup or any non-builder agent **fails twice** (an empty return is a failure, never a pass), or as soon as a definition proves **impossible or contradictory** as written: that one is the user's call. Stopping short isn't failure — gate what you have and hand off the same way.
 
 ## 5. You orchestrate
 
@@ -57,7 +68,7 @@ You never touch the code, and you never pull source, diffs or transcripts into y
 
 ## 6. Hand-off
 
-Append `ventilate`'s `ventilation:` line to the log and write the commit message to `$LOG.msg` — the goal as subject; one line per definition, met, unverified, or its gap; the log's `record:`. Then:
+Append `ventilate`'s `ventilation:` line to the log and write the commit message to `$LOG.msg` — the goal as subject; one line per definition, met, unverified, or its gap; one line for polish — what it changed, or why it was reverted; the log's `record:`. Then:
 
 ```sh
 ~/.claude/skills/implement-loop/scripts/handoff.sh
@@ -65,4 +76,4 @@ Append `ventilate`'s `ventilation:` line to the log and write the commit message
 
 It pushes the record branch `implement-loop/<stamp>` (every round, the brief, the log), lays the run down as **one commit on the starting branch** with `.deliverable/` removed, pushes it, and cleans up. If it stops, follow only the recovery it prints — the work is safe on the record branch. Then tear the setup down.
 
-Report for someone who never saw the run: each definition met, unverified or not, gaps in plain words; the commit and branch; the record branch, theirs to delete once merged, and `implement-loop-wip` if the hand-off noted the remote kept it; and if unfinished, their calls — widen the scope, adjust a definition, run longer, or take it as it stands. Open no PR; that's `stack-this`.
+Report for someone who never saw the run: each definition met, unverified or not, gaps in plain words; what polish changed, or why it was reverted; the commit and branch; the record branch, theirs to delete once merged, and `implement-loop-wip` if the hand-off noted the remote kept it; and if unfinished, their calls — widen the scope, adjust a definition, run longer, or take it as it stands. Open no PR; that's `stack-this`.
