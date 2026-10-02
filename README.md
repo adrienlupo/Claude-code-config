@@ -36,7 +36,7 @@ A run succeeds only through the gate: one fresh agent judges every definition at
 - a check setup that keeps failing
 - a definition that turns out to be contradictory
 
-The orchestrating agent never edits code or reads diffs. It reads verdicts and a log. The output is one commit on the starting branch, plus a pushed tag that holds every round, the brief and the log. The [hand-off scripts](skills/implement-loop/scripts/) have a [test suite](skills/implement-loop/tests/test-scripts.sh) that runs them against a throwaway git remote.
+The orchestrating agent never edits code or reads diffs. It reads verdicts and a log. The output is one commit on the starting branch, plus a pushed branch, `implement-loop/<stamp>`, that holds every round, the brief and the log. The [hand-off scripts](skills/implement-loop/scripts/) have a [test suite](skills/implement-loop/tests/test-scripts.sh) that runs them against a throwaway git remote.
 
 Two supporting skills:
 

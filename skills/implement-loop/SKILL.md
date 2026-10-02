@@ -1,6 +1,6 @@
 ---
 name: implement-loop
-description: Run a settled brief unattended until every definition of done passes its check — build, check with fresh context against the real output, repeat, and end on one fresh gate over the whole set. Hands off one pushed commit on the starting branch with the brief removed, plus a pushed run tag holding the brief and the run log for retro. Use when the user asks to run the implement loop, has a brief from the deliverable skill, or says "implement the brief".
+description: Run a settled brief unattended until every definition of done passes its check — build, check with fresh context against the real output, repeat, and end on one fresh gate over the whole set. Hands off one pushed commit on the starting branch with the brief removed, plus a pushed record branch holding the brief and the run log for retro. Use when the user asks to run the implement loop, has a brief from the deliverable skill, or says "implement the brief".
 argument-hint: "Nothing, or a path to a brief"
 ---
 
@@ -57,12 +57,12 @@ You never touch the code, and you never pull source, diffs or transcripts into y
 
 ## 6. Hand-off
 
-Append `ventilate`'s `ventilation:` line to the log and write the commit message to `$LOG.msg` — the goal as subject; one line per definition, met, unverified, or its gap; the log's `tag:`. Then:
+Append `ventilate`'s `ventilation:` line to the log and write the commit message to `$LOG.msg` — the goal as subject; one line per definition, met, unverified, or its gap; the log's `record:`. Then:
 
 ```sh
 ~/.claude/skills/implement-loop/scripts/handoff.sh
 ```
 
-It pushes the run tag (every round, the brief, the log), lays the run down as **one commit on the starting branch** with `.deliverable/` removed, pushes it, and cleans up. If it stops, follow only the recovery it prints — the work is safe in the tag. Then tear the setup down.
+It pushes the record branch `implement-loop/<stamp>` (every round, the brief, the log), lays the run down as **one commit on the starting branch** with `.deliverable/` removed, pushes it, and cleans up. If it stops, follow only the recovery it prints — the work is safe on the record branch. Then tear the setup down.
 
-Report for someone who never saw the run: each definition met, unverified or not, gaps in plain words; the commit and branch; the tag, theirs to delete once merged; and if unfinished, their calls — widen the scope, adjust a definition, run longer, or take it as it stands. Open no PR; that's `stack-this`.
+Report for someone who never saw the run: each definition met, unverified or not, gaps in plain words; the commit and branch; the record branch, theirs to delete once merged, and `implement-loop-wip` if the hand-off noted the remote kept it; and if unfinished, their calls — widen the scope, adjust a definition, run longer, or take it as it stands. Open no PR; that's `stack-this`.

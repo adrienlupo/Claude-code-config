@@ -16,6 +16,7 @@ done
 
 if [ -s "$LOG" ]; then
   MODE=resume   # a log means a run died mid-flight: its uncommitted work is its own, not the user's
+  sed -i.bak 's/^tag: /record: /' "$LOG" && rm -f "$LOG.bak"   # a log from before the record was a branch
   START=$(field start); SHA=$(field sha)
   case "$(git branch --show-current)" in implement-loop-wip|"$START") ;; *) echo "STOP: an unfinished run belongs to $START; this is $(git branch --show-current) — ask the user"; exit 1;; esac
   if ! git switch -q --no-guess implement-loop-wip 2>/dev/null; then
@@ -38,17 +39,17 @@ else
   ! git show-ref -q --verify refs/heads/implement-loop-wip || { echo "STOP: implement-loop-wip exists with no log — an earlier run's leftover; ask the user"; exit 1; }
   START=$(git branch --show-current); [ -n "$START" ] || { echo "STOP: detached HEAD"; exit 1; }
   # sha pins where the starting branch was: hand-off refuses to lay the run over a branch that moved
-  printf 'start: %s\nsha: %s\nwip: implement-loop-wip\ntag: implement-loop/%s\nsetup:\nround: 0\n' \
+  printf 'start: %s\nsha: %s\nwip: implement-loop-wip\nrecord: implement-loop/%s\nsetup:\nround: 0\n' \
     "$START" "$(git rev-parse HEAD)" "$(date +%Y%m%d-%H%M%S)" > "$LOG"
   git switch -q -c implement-loop-wip
 fi
 
-[ -n "$(field start)" ] && [ -n "$(field sha)" ] && [ -n "$(field tag)" ] || { echo "STOP: log unreadable: $LOG"; exit 1; }
+[ -n "$(field start)" ] && [ -n "$(field sha)" ] && [ -n "$(field record)" ] || { echo "STOP: log unreadable: $LOG"; exit 1; }
 if [ -z "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]; then
   echo 'WARN: CLAUDE_CODE_SUBAGENT_MODEL is unset — an agent dispatched without a model runs on the session model'
   echo 'warn: CLAUDE_CODE_SUBAGENT_MODEL unset' >> "$LOG"
 fi
 echo "mode: $MODE"
 echo "log: $LOG"
-grep -E '^(start|sha|tag|setup|round|repinned|trap): ' "$LOG"
+grep -E '^(start|sha|record|setup|round|repinned|trap): ' "$LOG"
 [ "$MODE" = fresh ] || { echo "last round lines:"; grep -E '^R[0-9]+ ' "$LOG" | tail -n 20 || true; }

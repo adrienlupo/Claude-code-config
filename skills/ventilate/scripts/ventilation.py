@@ -7,7 +7,7 @@ Usage:
 --session  defaults to $CLAUDE_CODE_SESSION_ID. Repeat it for a run that spans
            a /clear or a resume.
 --since    counts only agents started at or after TIME: ISO 8601 UTC
-           (2026-09-24T08:06:00Z) or a local stamp like implement-loop's tag,
+           (2026-09-24T08:06:00Z) or a local stamp like implement-loop's record,
            20260924-100600.
 --projects defaults to ~/.claude/projects.
 

@@ -21,12 +21,14 @@ ok "loop fresh start" "$ST | grep -q 'mode: fresh'"
 echo v2 > app.txt; mkdir -p .implement-loop/replay; echo drive > .implement-loop/replay/D1; git add -A; git commit -qm r1
 git switch -q main; ok "loop refuses resume from another branch (local wip exists)" "! $ST"
 git switch -q feat/x; echo 'trap: t1' >> $G/implement-loop.log; ok "loop resumes from its own branch and shows its traps" "[ \$($ST | grep -c -e '^mode: resume\$' -e '^trap: t1\$') = 2 ]"
+ok "resume reads a log from before the record was a branch" "sed -i.bak 's/^record: /tag: /' $G/implement-loop.log && rm $G/implement-loop.log.bak && $ST | grep -q '^record: implement-loop/' && ! grep -q '^tag: ' $G/implement-loop.log"
 ok "hand-off refuses without a message" "! $HO"
-printf 'G\n\nD1 met\n' > $G/implement-loop.log.msg; TAG=$(sed -n 's/^tag: //p' $G/implement-loop.log)
+printf 'G\n\nD1 met\n' > $G/implement-loop.log.msg; REC=$(sed -n 's/^record: //p' $G/implement-loop.log)
 ok "hand-off happy path" "$HO"
 ok "one commit on feat/x, pushed" "[ \$(git rev-parse HEAD) = \$(git rev-parse origin/feat/x) ] && git log -1 --format=%s | grep -qx G"
 ok "brief removed from the branch" "! git ls-tree -r --name-only HEAD | grep -q deliverable"
-ok "tag on remote has brief and log, not the round artifacts" "git ls-remote --tags origin | grep -q '$TAG' && git ls-tree -r --name-only $TAG | grep -q .deliverable/brief.md && git ls-tree -r --name-only $TAG | grep -q .implement-loop/log && ! git ls-tree -r --name-only $TAG | grep -q replay/"
+ok "record branch on remote has brief and log, not the round artifacts" "git ls-remote --exit-code --heads origin '$REC' && git fetch -q origin '$REC' && git show FETCH_HEAD:.deliverable/brief.md && git show FETCH_HEAD:.implement-loop/log | grep -qx 'record: $REC' && ! git ls-tree -r --name-only FETCH_HEAD | grep -q replay/"
+ok "no tag, pushed or local" "[ -z \"\$(git ls-remote --tags origin)\$(git tag)\" ]"
 ok "cleanup: log renamed, wip gone, excludes removed" "ls $G | grep -q 'implement-loop.log.*.done' && ! git show-ref -q refs/heads/implement-loop-wip && ! grep -q implement-loop $G/info/exclude && ! grep -q worktrees $G/info/exclude"
 brief feat/x; git add .deliverable; git commit -qm b2; git push -q; sleep 1
 $ST >/dev/null; printf 'G\n' > $G/implement-loop.log.msg; ok "nothing built leaves the branch and brief alone" "$HO | grep -q 'nothing built' && [ -f .deliverable/brief.md ]"
@@ -43,4 +45,22 @@ ok "re-pin detected on resume" "$ST | grep -q repinned"
 printf 'G\n' > $G/implement-loop.log.msg; ok "re-pin hand-off removes brief and names the range" "$HO | grep -q 're-pinned run' && ! git ls-tree -r --name-only HEAD | grep -q deliverable"
 git worktree add -q ../wt -b feat/w; cd ../wt; brief feat/w; git add .deliverable; git commit -qm b; git push -q -u origin feat/w 2>/dev/null; sleep 1
 ok "worktree run end to end" "$ST >/dev/null && echo w > w.txt && git add -A && git commit -qm r && printf 'W\n' > \$(git rev-parse --absolute-git-dir)/implement-loop.log.msg && $HO"
+# a remote like the cloud's git proxy: branches only, no deletions
+cd "$T" || exit 1; git clone -q --bare remote.git proxy.git
+cat > proxy.git/hooks/pre-receive <<'HOOK'; chmod +x proxy.git/hooks/pre-receive
+#!/bin/sh
+while read -r o n r; do
+  case $r in refs/heads/*) ;; *) echo "proxy: branches only"; exit 1;; esac
+  case $n in *[!0]*) ;; *) echo "proxy: no deletions"; exit 1;; esac
+done
+HOOK
+git clone -q proxy.git p; cd p || exit 1; git config user.email t@t; git config user.name t; G=$(git rev-parse --absolute-git-dir)
+ok "proxy refuses a tag and a branch deletion" "! git push -q origin HEAD:refs/tags/t && git push -q origin HEAD:refs/heads/gone && ! git push -q origin --delete gone"
+git switch -q -c feat/p; brief feat/p; git add .deliverable; git commit -qm b; git push -q -u origin feat/p; B=$(git rev-parse HEAD)
+"$ST" >/dev/null; echo p > p.txt; git add -A; git commit -qm r1; git push -q origin implement-loop-wip; printf 'P\n' > "$G/implement-loop.log.msg"
+REC=$(sed -n 's/^record: //p' "$G/implement-loop.log"); OUT=$("$HO" 2>&1); RC=$?; printf '%s\n' "$OUT" | sed 's/^/     | /'
+ok "proxy: hand-off exits 0 and ends on its final line" "[ $RC = 0 ] && printf '%s\n' \"\$OUT\" | tail -1 | grep -qx 'handed off: feat/p @ [0-9a-f]*, pushed; record on branch $REC'"
+ok "proxy: one commit laid on feat/p and pushed, brief removed" "[ \$(git rev-parse HEAD) = \$(git rev-parse origin/feat/p) ] && [ \$(git rev-parse HEAD^) = $B ] && git log -1 --format=%s | grep -qx P && git ls-tree -r --name-only HEAD | grep -qx p.txt && ! git ls-tree -r --name-only HEAD | grep -q deliverable"
+ok "proxy: record branch pushed with brief and log, no tag" "git fetch -q origin '$REC' && git show FETCH_HEAD:.deliverable/brief.md && git show FETCH_HEAD:.implement-loop/log | grep -qx 'record: $REC' && [ -z \"\$(git ls-remote --tags origin)\" ]"
+ok "proxy: refused wip deletion is a note naming the branch, and cleanup still ran" "printf '%s\n' \"\$OUT\" | grep -q '^note: .*implement-loop-wip' && git ls-remote --exit-code --heads origin implement-loop-wip && ls $G | grep -q 'implement-loop.log.*.done' && [ ! -e $G/implement-loop.log ] && [ ! -e .implement-loop ] && ! git show-ref -q refs/heads/implement-loop-wip && ! grep -q implement-loop $G/info/exclude"
 echo "--- $pass passed, $fail failed"; rm -rf $T
