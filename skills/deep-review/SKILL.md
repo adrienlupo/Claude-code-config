@@ -32,7 +32,7 @@ A triage judge first decides whether the change carries a real design decision �
 
 ## 5. Fixes
 
-One pass per stage, acting on the cited findings, then stop — a review is never looped until it comes back clean. Small, safe fixes (dead code, reusing an existing helper, a bug fix with its test) are applied; design and interface changes are reported only. Each agent's target is its slice's own range on a stack, `<fixed point>...HEAD` otherwise. Once its skill returns, the agent commits each finding on its own, so any one reverts alone, and returns the shas.
+One pass per stage, acting on the cited findings, then stop — a review is never looped until it comes back clean. Small, safe fixes (dead code, reusing an existing helper, a bug fix with its test) are applied; design and interface changes are reported only. On a stack each agent's target is its slice's own range — `simplify`'s is the whole stack (§6); otherwise `<fixed point>...HEAD`. Once its skill returns, the agent commits each finding on its own, so any one reverts alone, and returns the shas.
 
 - **Quality** — one agent runs the `simplify` skill. Then a fresh one fixes against `BASELINE.md` plus the repo's own standards — `CLAUDE.md`, `AGENTS.md`, `CODING_STANDARDS.md`, `CONTRIBUTING.md`, `.cursor/rules/`. The repo wins where they disagree; skip anything tooling already enforces. Every finding cites the rule and quotes the hunk.
 - **Bugs** — one agent runs the built-in `code-review` skill at `high` with `--fix`.
@@ -41,7 +41,7 @@ One pass per stage, acting on the cited findings, then stop — a review is neve
 
 ## 6. Stacks
 
-The gate reads the whole stack. Quality and bugs run slice by slice, bottom up: a slice's agents change only their slice but get the whole stack's diff read-only, so duplication across slices is still caught. A fix lands in the lowest slice that introduced the code — `stack-this`'s rule for hunks. After each slice: green on its own base, then restack the slices above it with `gh-stack`. A restack conflict (exit 3 restores every branch) reverts that fix, restacks again, and goes in the report; conflicts are never resolved here. Every layer green: resubmit the stack with `gh-stack` — the gate passed, so nothing waits on a confirmation. With no stack, the same pipeline runs on the whole diff, and the branch is pushed if it has an upstream.
+The gate reads the whole stack, and `simplify` runs once over it, before the slices — one agent, on the top branch, over `<trunk>...HEAD` — then carries each fix down to the lowest slice that introduced the code, bottom up, each slice it touches green on its own base and restacked; a fix that won't apply there is dropped and goes in the report. The baseline fixer and bugs then run slice by slice, bottom up: a slice's agents change only their slice but get the whole stack's diff read-only, so duplication across slices is still caught. A fix lands in the lowest slice that introduced the code — `stack-this`'s rule for hunks. After each slice: green on its own base, then restack the slices above it with `gh-stack`. A restack conflict (exit 3 restores every branch) reverts that fix, restacks again, and goes in the report; conflicts are never resolved here. Every layer green: resubmit the stack with `gh-stack` — the gate passed, so nothing waits on a confirmation. With no stack, the same pipeline runs on the whole diff, and the branch is pushed if it has an upstream.
 
 ## 7. Report
 
