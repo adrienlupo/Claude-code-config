@@ -42,19 +42,34 @@ Opus 5.5 at `xhigh` scores ~1.4 points above `high` for 2.5× the cost. Effort i
 
 - **Builders climb `opus/low` → `opus/high` → `opus/xhigh`**, one rung per failed attempt; failing at the top is the plateau. Start higher only when the task says why. It is the cheapest measured policy on checkable work, and it needs a check that fails bad work.
 - **Judges are `opus`** — the docs' default for agent work is Opus 5.5 at `medium`. A false pass is a loop's costliest error, so the gate gets the top rung.
-- **Polish agents are `opus/high`**: `simplify` and `code-review --fix` edit code no check of theirs judges — only the gate after them catches a bad edit.
 - **Captures are `haiku`**: run a command, the suite or a replay script (browser included), hand back the artifact. Keep Haiku's input small.
 - **Script-writing captures are `sonnet/medium`**: the first replay script of a browser definition, or the rewrite of one that no longer reaches its state. An MCP drive, or a capture that failed once, goes to `opus/low`.
 - **Sonnet writes replay scripts and nothing else**: everywhere else `opus/low` beats it on score at a seventh of the cost per solved task.
 - **Fable is not a worker, and `run()` refuses it**: Opus 5.5 matched it at a fifth of the cost. The docs' one case for Fable — Opus 5.5 at higher effort still falls short — is a plateau, and plateaus go back to the user.
 - **`max` is not a rung**: it "may show diminishing returns and is prone to overthinking".
 
+## Review
+
+`deep-review`'s agents, by role:
+
+| Review role | ventilate role | Model |
+|---|---|---|
+| Design gate | judge (gate) | `opus/xhigh` |
+| "Does this need Design It Twice?" | judge | `opus/medium` |
+| Design It Twice designers | builders | `opus/high` |
+| `simplify`, baseline fixer, `code-review --fix` | polish | `opus/high` |
+| Docs checker | judge | `opus/medium` |
+| Running the checks | capture | `haiku` |
+
+**Polish agents are `opus/high`**: `simplify`, the baseline fixer and `code-review --fix` edit code no check of theirs judges — only the repo's checks after them catch a bad edit.
+
 ## Proof
 
-Before an implement-loop log is frozen, append what actually ran:
+Before a run's log is frozen, append what actually ran — from the repo toplevel, to whichever log this run writes:
 
 ```sh
 python3 ~/.claude/skills/ventilate/scripts/ventilation.py >> "$(git rev-parse --absolute-git-dir)/implement-loop.log"
+python3 ~/.claude/skills/ventilate/scripts/ventilation.py >> "$(git rev-parse --git-common-dir)/deep-review.log"
 ```
 
-It finds the session by `$CLAUDE_CODE_SESSION_ID`, not the cwd; counts every subagent transcript of the session, workflow agents included, by the model and effort it recorded; and names each agent given no model that ran on the session's model — a dispatch that bypassed `run()`, which the hand-off reports by id. Agents from outside the run, like `deliverable`'s Fable reviewer, stay in the count: say what they were, never filter them out. A run resumed in a new session takes one `--session <id>` per session.
+It finds the session by `$CLAUDE_CODE_SESSION_ID`, not the cwd; counts every subagent transcript of the session, workflow agents included, by the model and effort it recorded; and names each agent given no model that ran on the session's model — a dispatch that bypassed `run()`, which the run's report names by id. Agents from outside the run, like `deliverable`'s Fable reviewer, stay in the count: say what they were, never filter them out. A run resumed in a new session takes one `--session <id>` per session.
