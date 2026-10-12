@@ -190,7 +190,8 @@
     "typescript-lsp@claude-plugins-official": true,
     "claude-seo@agricidaniel-claude-seo": false,
     "expo@claude-plugins-official": true,
-    "mattpocock-skills@mattpocock": true
+    "mattpocock-skills@mattpocock": true,
+    "impeccable@impeccable": true
   },
   "extraKnownMarketplaces": {
     "addy-agent-skills": {
