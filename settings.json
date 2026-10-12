@@ -212,6 +212,12 @@
         "repo": "mattpocock/skills"
       },
       "autoUpdate": true
+    },
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable"
+      }
     }
   },
   "outputStyle": "Concise",

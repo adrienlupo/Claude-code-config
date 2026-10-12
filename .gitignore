@@ -17,7 +17,6 @@
 !skills/**
 skills/synced/
 !notify.sh
-!cloud-setup.sh
 !settings.local.json
 
 # Ignore macOS system files
