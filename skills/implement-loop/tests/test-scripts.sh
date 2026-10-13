@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sandbox tests for the deliverable and implement-loop scripts. Usage: test-scripts.sh [skills-dir]
 set -u
-D=${1:-$HOME/.claude/skills}; T=$(mktemp -d); cd $T; export CLAUDE_CODE_SUBAGENT_MODEL=sonnet
+D=${1:-$HOME/.claude/skills}; T=$(mktemp -d); cd $T
 pass=0; fail=0; ok(){ if eval "$2" >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   $1"; else fail=$((fail+1)); echo "FAIL $1"; fi; }
 git init -q --bare -b main remote.git; git init -q -b main w; cd w; git config user.email t@t; git config user.name t
 echo v1 > app.txt; printf '*.sql\n' > .gitignore; git add -A; git commit -qm init; git remote add origin ../remote.git; git push -q -u origin main; git remote set-head origin main

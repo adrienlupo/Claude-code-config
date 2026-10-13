@@ -27,11 +27,9 @@ ok  "keyed by model and effort"                  "$out" "opus-5-5/low 1"
 ok  "no effort recorded -> bare model"           "$out" "haiku-4-5 1"
 ok  "synthetic-only agent is no-reply"           "$out" "no-reply 1"
 not "synthetic never shows as a model"           "$out" "synthetic"
-ok  "unnamed agent on the session model flagged" "$out" "(fable-5-1): 1 (wf_test-123/bbbbbbbb)"
-unasked=${out#*unasked on the session model}; unasked=${unasked%% — outside*}
-not "named fable is not flagged unasked"         "$unasked" "eeeeeeee"
-not "unnamed agent on its definition's model not flagged" "$unasked" "cccccccc"
-ok  "named fable outside run() still listed"     "$out" "eeeeeeee fable-5-1/high"
+ok  "a workflow agent given no model is outside run()" "$out" "wf_test-123/bbbbbbbb fable-5-1/xhigh"
+ok  "an Agent-tool agent is outside run()"       "$out" "eeeeeeee fable-5-1/high"
+ok  "every Fable agent listed"                   "$out" "fable: 2 (eeeeeeee fable-5-1/high, wf_test-123/bbbbbbbb fable-5-1/xhigh)"
 
 out=$(python3 "$V" --projects "$T/projects" --session $S --since 2026-09-24T07:30:00Z)
 ok  "--since drops earlier agents"               "$out" "ventilation: 5 agents"
@@ -124,7 +122,7 @@ if [ -d "$R" ]; then   # Agent-tool subagents: Opus and Fable named, one claude-
   out=$(python3 "$V" --session 4b4640b3-4158-4cb8-9d74-a1e9b4755ae4)
   ok  "real: Fable judges counted" "$out" "fable-5-1/xhigh "
   ok  "real: guide agent on Haiku" "$out" "haiku-4-5 "
-  ok  "real: nothing unasked"      "$out" "(opus-5-5): none"
+  ok  "real: Fable judges listed"  "$out" "fable: "
 fi
 W=~/.claude/projects/-Users-qraft-code-wisetax-app/c27659ae-d088-4ec2-a0de-930e2438739b
 if [ -d "$W" ]; then   # a workflow-only session: every agent sits under subagents/workflows/wf_*/

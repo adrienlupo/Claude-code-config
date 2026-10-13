@@ -15,19 +15,15 @@ Usage:
            transcripts is here - a teleported session keeps only its own.
 
 The session is found by id, never by encoding the cwd, and every agent-*.jsonl
-under <session>/subagents counts, workflow agents included
-(subagents/workflows/wf_*/). One agent is one entry, keyed by the model and
-effort its transcript records. "unasked" lists the agents that were given no
-model (their .meta.json has none) and ran on a model the session itself used:
-the silent inheritance this line exists to catch.
+under <session>/subagents counts, workflow agents (workflows/wf_*/) included -
+one entry each, keyed by the model and effort its transcript records.
 
 Of the agents the session dispatched itself (spawnDepth <= 1), "outside run()"
-lists each that is not under workflows/wf_*/ with run()'s label
-"<role> <model>/<effort|->" - an Agent-tool subagent or a bare agent() call, at
-the session's effort and free to be Fable - and "label≠ran" each whose label
-names a model or effort its transcript did not run on. An agent's own agents
-are out of run()'s reach, so only "fable" sees them: every agent that ran on
-Fable, at any depth.
+lists each not under workflows/wf_*/ with run()'s label "<role> <model>/<effort|->":
+an Agent-tool subagent or a bare agent() call, on the session's effort and free
+to be Fable. "label≠ran" lists each whose label names a model or effort its
+transcript did not run on. "fable" lists every agent that ran on Fable, at any
+depth - an agent's own agents are out of run()'s reach.
 
 Exit 1 when a session can't be found - never an empty line that reads as clean.
 """
@@ -121,7 +117,7 @@ def main():
         return 1
     projects = pathlib.Path(a.projects)
 
-    session_models, agents, launched = set(), [], 0
+    agents, launched = [], 0
     for sid in sessions:
         dirs = [d for d in projects.glob(f"*/{sid}") if d.is_dir()]
         mains = list(projects.glob(f"*/{sid}.jsonl"))
@@ -129,12 +125,11 @@ def main():
             print(f"ventilation.py: session {sid} not found under {projects}", file=sys.stderr)
             return 1
         for m in mains:
-            session_models |= {model for model, _ in assistant_turns(m)}
             launched += dispatches(m, since)
         for d in dirs:
             agents += sorted((d / "subagents").rglob("agent-*.jsonl"))
 
-    tally, unasked, outside, drift, fable, total = collections.Counter(), [], [], [], [], 0
+    tally, outside, drift, fable, total = collections.Counter(), [], [], [], 0
     for path in agents:
         if since and (first_time(path) or since) < since:
             continue
@@ -150,8 +145,6 @@ def main():
         meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
         where = path.parent.name if path.parent.name.startswith("wf_") else ""
         name = f"{where + '/' if where else ''}{path.stem[6:14]}"
-        if not meta.get("model") and model in session_models:
-            unasked.append(name)
         if model.startswith("fable"):
             fable.append(f"{name} {ran}")
         if (meta.get("spawnDepth") or 1) > 1:
@@ -162,13 +155,12 @@ def main():
         elif not model.startswith(label[1]) or (effort and label[2] not in ("-", effort)):
             drift.append(f"{name} {label[1]}/{label[2]}→{ran}")
 
-    def listed(xs, sep=" "):
-        return f"{len(xs)} ({sep.join(xs)})" if xs else "none"
+    def listed(xs):
+        return f"{len(xs)} ({', '.join(xs)})" if xs else "none"
 
     counts = " · ".join(f"{k} {n}" for k, n in tally.most_common()) or "none"
-    on = ", ".join(sorted(session_models)) or "?"
-    print(f"ventilation: {total} agents — {counts} — unasked on the session model ({on}): {listed(unasked)}"
-          f" — outside run(): {listed(outside, ', ')} — label≠ran: {listed(drift, ', ')} — fable: {listed(fable, ', ')}")
+    print(f"ventilation: {total} agents — {counts} — outside run(): {listed(outside)}"
+          f" — label≠ran: {listed(drift)} — fable: {listed(fable)}")
     if a.check and launched and not total:
         print(f"ventilation.py: {launched} dispatches and no agent transcript - nothing to check, so no pass", file=sys.stderr)
         return 1

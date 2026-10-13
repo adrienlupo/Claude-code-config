@@ -47,10 +47,6 @@ fi
 [ -n "$(field start)" ] && [ -n "$(field sha)" ] && [ -n "$(field record)" ] || { echo "STOP: log unreadable: $LOG"; exit 1; }
 # a stop the run wrote outlives the session that wrote it: a resume dispatches nothing, it hands off
 [ -z "$(field stopped)" ] || { echo "STOP: this run stopped on $(field stopped) — dispatch nothing more; hand it off ungated"; exit 1; }
-if [ -z "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]; then
-  echo 'WARN: CLAUDE_CODE_SUBAGENT_MODEL is unset — an agent dispatched without a model runs on the session model'
-  echo 'warn: CLAUDE_CODE_SUBAGENT_MODEL unset' >> "$LOG"
-fi
 echo "mode: $MODE"
 echo "log: $LOG"
 grep -E '^(start|sha|record|setup|round|repinned|trap): ' "$LOG"

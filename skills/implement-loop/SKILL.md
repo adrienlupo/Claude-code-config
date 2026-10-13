@@ -24,14 +24,13 @@ Run unattended only where the host's permissions already deny force-push, destru
 
 ## 3. The loop
 
-Load `ventilate` and dispatch every agent — the sizing check and the gate included — by calling the Workflow tool, through `ventilate`'s `run()` pasted as printed: every agent gets a chosen model and effort, never the session's by omission. No Workflow tool means no run — say so and stop; the Agent tool is not a fallback.
-
-Each workflow is a script under `.implement-loop/wf/`, launched by `scriptPath` once `ventilate`'s preflight passes it. Answer a question the user asks mid-run yourself: an agent outside a workflow fails the check. After every workflow returns, from the repo toplevel, run `ventilate`'s check and log the line it prints:
+Load `ventilate`. Every agent — the sizing check and the gate included — goes through its `run()` in a workflow script under `.implement-loop/wf/`, with its Check around every workflow; log the line the after-check prints, and its non-zero exit is §4's. From the repo toplevel, the run's start stamp is:
 
 ```sh
-python3 ~/.claude/skills/ventilate/scripts/preflight.py .implement-loop/wf/<script>.js   # before: exit 2 → fix the script
-python3 ~/.claude/skills/ventilate/scripts/ventilation.py --check --since "$(sed -n 's|^record: implement-loop/||p' "$(git rev-parse --absolute-git-dir)/implement-loop.log")"   # after: non-zero → §4
+sed -n 's|^record: implement-loop/||p' "$(git rev-parse --absolute-git-dir)/implement-loop.log"
 ```
+
+Answer a question the user asks mid-run yourself: an agent outside a workflow fails the check.
 
 No two agents drive a browser at once, builders included, and each closes the pages it opened — several Chromiums at once have killed a cloud host.
 
