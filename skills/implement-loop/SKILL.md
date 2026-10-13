@@ -10,7 +10,7 @@ The brief says what done is and how to check it. Everything in between is yours 
 
 `.deliverable/brief.md` unless a path was given. Say in one line which goal it holds and when it was stamped. If it's stale — another branch, weeks old, not the goal the user asked for — or holds nothing checkable, run `deliverable` first. Never fill in a goal yourself.
 
-The brief is read-only: a definition rewritten mid-run has been deleted, not met. `## Out of scope` is a wall. Every agent that builds or checks a definition gets it, and its check, **verbatim**.
+The brief is read-only: a definition rewritten mid-run has been deleted, not met. `## Out of scope` is a wall. Every agent that builds or checks a definition gets it, and its check, **verbatim**. The check is what gets run and judged, never who runs it: a model or effort the brief names is ignored for dispatch — log it as `asked:`, and choose from `ventilate` as for any agent.
 
 ## 2. Start
 
@@ -24,7 +24,14 @@ Run unattended only where the host's permissions already deny force-push, destru
 
 ## 3. The loop
 
-Load `ventilate` and run the rounds as Workflow scripts through its `run()`: every agent gets a chosen model, never the session model by omission.
+Load `ventilate` and dispatch every agent — the sizing check and the gate included — by calling the Workflow tool, through `ventilate`'s `run()` pasted as printed: every agent gets a chosen model and effort, never the session's by omission. No Workflow tool means no run — say so and stop; the Agent tool is not a fallback.
+
+Each workflow is a script under `.implement-loop/wf/`, launched by `scriptPath` once `ventilate`'s preflight passes it. Answer a question the user asks mid-run yourself: an agent outside a workflow fails the check. After every workflow returns, from the repo toplevel, run `ventilate`'s check and log the line it prints:
+
+```sh
+python3 ~/.claude/skills/ventilate/scripts/preflight.py .implement-loop/wf/<script>.js   # before: exit 2 → fix the script
+python3 ~/.claude/skills/ventilate/scripts/ventilation.py --check --since "$(sed -n 's|^record: implement-loop/||p' "$(git rev-parse --absolute-git-dir)/implement-loop.log")"   # after: non-zero → §4
+```
 
 No two agents drive a browser at once, builders included, and each closes the pages it opened — several Chromiums at once have killed a cloud host.
 
@@ -49,7 +56,7 @@ How a definition is checked is what makes the loop worth running:
 
 ## 4. Stopping
 
-Stop when the gate passes. Stop short on a **plateau** — the same gap logged three rounds running for a definition the top of the ladder has had; compare the logged strings, not your impression — after **eight rounds**, when the setup or any non-builder agent **fails twice** (an empty return is a failure, never a pass), or as soon as a definition proves **impossible or contradictory** as written: that one is the user's call. Stopping short isn't failure — gate what you have and hand off the same way.
+Stop when the gate passes. Stop short on a **plateau** — the same gap logged three rounds running for a definition the top of the ladder has had; compare the logged strings, not your impression — after **eight rounds**, when the setup or any non-builder agent **fails twice** (an empty return is a failure, never a pass), or as soon as a definition proves **impossible or contradictory** as written: that one is the user's call. Stopping short isn't failure — gate what you have and hand off the same way. The one exception: when `ventilate`'s check exits non-zero, write `stopped: ventilation` to the log — `start.sh` then refuses to resume — and dispatch nothing more, the gate included: hand off ungated, every definition unverified, the check's line in the report.
 
 ## 5. You orchestrate
 

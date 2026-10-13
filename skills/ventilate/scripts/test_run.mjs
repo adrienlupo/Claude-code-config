@@ -17,6 +17,12 @@ throws('fable is refused', () => run('gate', 'p', { model: 'fable', effort: 'low
 throws('a full model id is refused', () => run('build', 'p', { model: 'claude-opus-5-5', effort: 'low' }), /model must be/)
 throws('opus without effort is refused', () => run('build', 'p', { model: 'opus' }), /name an effort/)
 throws('sonnet without effort is refused', () => run('judge', 'p', { model: 'sonnet' }), /name an effort/)
+throws('max is refused', () => run('build', 'p', { model: 'opus', effort: 'max' }), /max is not a rung/)
+
+passes('a caller label never replaces run()\'s', () => {
+  run('build', 'P', { model: 'opus', effort: 'low', label: 'Build p1' })
+  assert.equal(calls.at(-1).opts.label, 'build opus/low')
+})
 
 passes('opus/low goes through with model, effort, label and pass-through opts', () => {
   run('build', 'P', { model: 'opus', effort: 'low', phase: 'R2', schema: { type: 'object' } })

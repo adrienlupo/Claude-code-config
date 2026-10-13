@@ -21,6 +21,8 @@ ok "loop fresh start" "$ST | grep -q 'mode: fresh'"
 echo v2 > app.txt; mkdir -p .implement-loop/replay; echo drive > .implement-loop/replay/D1; git add -A; git commit -qm r1
 git switch -q main; ok "loop refuses resume from another branch (local wip exists)" "! $ST"
 git switch -q feat/x; echo 'trap: t1' >> $G/implement-loop.log; ok "loop resumes from its own branch and shows its traps" "[ \$($ST | grep -c -e '^mode: resume\$' -e '^trap: t1\$') = 2 ]"
+echo 'stopped: ventilation' >> $G/implement-loop.log; ok "a run stopped on ventilation won't resume" "! $ST && $ST | grep -q '^STOP: this run stopped on ventilation'"
+sed -i.bak '/^stopped: /d' $G/implement-loop.log && rm $G/implement-loop.log.bak
 ok "resume reads a log from before the record was a branch" "sed -i.bak 's/^record: /tag: /' $G/implement-loop.log && rm $G/implement-loop.log.bak && $ST | grep -q '^record: implement-loop/' && ! grep -q '^tag: ' $G/implement-loop.log"
 ok "hand-off refuses without a message" "! $HO"
 printf 'G\n\nD1 met\n' > $G/implement-loop.log.msg; REC=$(sed -n 's/^record: //p' $G/implement-loop.log)

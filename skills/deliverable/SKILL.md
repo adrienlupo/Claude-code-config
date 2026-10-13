@@ -42,6 +42,8 @@ Each gets a check an agent can run without you:
 - a Simulator on the right screen;
 - **qualitative** (design, copy, feel): a blind A/B — a judge scores the build against the reference without knowing which is which, and the bar it must reach is set here.
 
+A check says what is run and judged, never which model or effort runs it — that is `ventilate`'s call in the loop. Dry-run a judge on `opus`, the model `ventilate` gives judges, so the bar you calibrate holds in the loop.
+
 Derive the checks from the repo; ask the user only what it can't tell you. Setup reaches the state under test in one step — a seed, a fixture, a deep link — never by clicking through the app. Every clause of a definition needs a step in its check and a state the setup produces — two items where it says every, an overflow where it says truncated. Add what's missing; a clause that can't have both goes to the user, never to a judge. Then run every check once, now, against the current repo, and write back what actually worked: a check that breaks at round one breaks unattended. The loop pays each check every round it's in question: rewrite one that takes a fresh agent more than a few minutes (count its steps if the feature doesn't exist yet), and script a long browser drive under `.deliverable/assets/` when the repo and the loop's host already have a driver for it. If a definition can't be checked, the loop is the wrong tool — say so.
 
 Add `## Out of scope` only when something needs walling off; it is the unattended loop's only wall.

@@ -2,7 +2,7 @@
 """Print the `ventilation:` line: what every subagent of a session actually ran on.
 
 Usage:
-    ventilation.py [--session ID]... [--since TIME] [--projects DIR]
+    ventilation.py [--session ID]... [--since TIME] [--projects DIR] [--check]
 
 --session  defaults to $CLAUDE_CODE_SESSION_ID. Repeat it for a run that spans
            a /clear or a resume.
@@ -10,6 +10,9 @@ Usage:
            (2026-09-24T08:06:00Z) or a local stamp like implement-loop's record,
            20260924-100600.
 --projects defaults to ~/.claude/projects.
+--check    exit 2 when "outside run()", "label≠ran" or "fable" is not none;
+           exit 1 when the session dispatched agents but none of their
+           transcripts is here - a teleported session keeps only its own.
 
 The session is found by id, never by encoding the cwd, and every agent-*.jsonl
 under <session>/subagents counts, workflow agents included
@@ -17,6 +20,14 @@ under <session>/subagents counts, workflow agents included
 effort its transcript records. "unasked" lists the agents that were given no
 model (their .meta.json has none) and ran on a model the session itself used:
 the silent inheritance this line exists to catch.
+
+Of the agents the session dispatched itself (spawnDepth <= 1), "outside run()"
+lists each that is not under workflows/wf_*/ with run()'s label
+"<role> <model>/<effort|->" - an Agent-tool subagent or a bare agent() call, at
+the session's effort and free to be Fable - and "label≠ran" each whose label
+names a model or effort its transcript did not run on. An agent's own agents
+are out of run()'s reach, so only "fable" sees them: every agent that ran on
+Fable, at any depth.
 
 Exit 1 when a session can't be found - never an empty line that reads as clean.
 """
@@ -28,6 +39,10 @@ import os
 import pathlib
 import re
 import sys
+
+
+LABEL = re.compile(r"\b(haiku|sonnet|opus)/(\S+)$")
+DISPATCH = {"Workflow", "Agent", "Task"}
 
 
 def short(model):
@@ -59,6 +74,24 @@ def assistant_turns(path):
             yield short(m["model"]), r.get("effort")
 
 
+def dispatches(path, since):
+    """Workflow and Agent tool calls the session made since `since`, launches that errored left out."""
+    calls, errored = set(), set()
+    for r in records(path):
+        m = r.get("message")
+        if not isinstance(m, dict) or not isinstance(m.get("content"), list):
+            continue
+        for b in m["content"]:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use" and b.get("name") in DISPATCH:
+                if not since or not r.get("timestamp") or parse_time(r["timestamp"]) >= since:
+                    calls.add(b.get("id"))
+            elif b.get("type") == "tool_result" and b.get("is_error"):
+                errored.add(b.get("tool_use_id"))
+    return len(calls - errored)
+
+
 def first_time(path):
     for r in records(path):
         if r.get("timestamp"):
@@ -71,6 +104,7 @@ def main():
     ap.add_argument("--session", action="append")
     ap.add_argument("--since")
     ap.add_argument("--projects", default=os.path.expanduser("~/.claude/projects"))
+    ap.add_argument("--check", action="store_true")
     ap.add_argument("-h", "--help", action="store_true")
     a = ap.parse_args()
     if a.help:
@@ -87,7 +121,7 @@ def main():
         return 1
     projects = pathlib.Path(a.projects)
 
-    session_models, agents = set(), []
+    session_models, agents, launched = set(), [], 0
     for sid in sessions:
         dirs = [d for d in projects.glob(f"*/{sid}") if d.is_dir()]
         mains = list(projects.glob(f"*/{sid}.jsonl"))
@@ -96,10 +130,11 @@ def main():
             return 1
         for m in mains:
             session_models |= {model for model, _ in assistant_turns(m)}
+            launched += dispatches(m, since)
         for d in dirs:
             agents += sorted((d / "subagents").rglob("agent-*.jsonl"))
 
-    tally, unasked, total = collections.Counter(), [], 0
+    tally, unasked, outside, drift, fable, total = collections.Counter(), [], [], [], [], 0
     for path in agents:
         if since and (first_time(path) or since) < since:
             continue
@@ -109,18 +144,35 @@ def main():
             tally["no-reply"] += 1
             continue
         (model, effort), _ = turns.most_common(1)[0]
-        tally[f"{model}/{effort}" if effort else model] += 1
-        meta = path.with_name(path.name[: -len(".jsonl")] + ".meta.json")
-        asked = json.loads(meta.read_text()).get("model") if meta.exists() else None
-        if not asked and model in session_models:
-            where = path.parent.name if path.parent.name.startswith("wf_") else ""
-            unasked.append(f"{where + '/' if where else ''}{path.stem[6:14]}")
+        ran = f"{model}/{effort}" if effort else model
+        tally[ran] += 1
+        meta_path = path.with_name(path.name[: -len(".jsonl")] + ".meta.json")
+        meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+        where = path.parent.name if path.parent.name.startswith("wf_") else ""
+        name = f"{where + '/' if where else ''}{path.stem[6:14]}"
+        if not meta.get("model") and model in session_models:
+            unasked.append(name)
+        if model.startswith("fable"):
+            fable.append(f"{name} {ran}")
+        if (meta.get("spawnDepth") or 1) > 1:
+            continue
+        label = LABEL.search(meta.get("description") or "")
+        if not where or not label:
+            outside.append(f"{name} {ran}")
+        elif not model.startswith(label[1]) or (effort and label[2] not in ("-", effort)):
+            drift.append(f"{name} {label[1]}/{label[2]}→{ran}")
+
+    def listed(xs, sep=" "):
+        return f"{len(xs)} ({sep.join(xs)})" if xs else "none"
 
     counts = " · ".join(f"{k} {n}" for k, n in tally.most_common()) or "none"
     on = ", ".join(sorted(session_models)) or "?"
-    flag = f"{len(unasked)} ({' '.join(unasked)})" if unasked else "none"
-    print(f"ventilation: {total} agents — {counts} — unasked on the session model ({on}): {flag}")
-    return 0
+    print(f"ventilation: {total} agents — {counts} — unasked on the session model ({on}): {listed(unasked)}"
+          f" — outside run(): {listed(outside, ', ')} — label≠ran: {listed(drift, ', ')} — fable: {listed(fable, ', ')}")
+    if a.check and launched and not total:
+        print(f"ventilation.py: {launched} dispatches and no agent transcript - nothing to check, so no pass", file=sys.stderr)
+        return 1
+    return 2 if a.check and (outside or drift or fable) else 0
 
 
 if __name__ == "__main__":
