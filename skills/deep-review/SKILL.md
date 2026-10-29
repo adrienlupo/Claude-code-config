@@ -14,7 +14,7 @@ Committed changes only — `git diff <fixed point>...HEAD`, three-dot. The fixed
 
 ## 2. The intent
 
-The gate judges the code against what it was meant to do. Take the first found: a `deliverable` brief (`.deliverable/brief.md`, or once the loop has removed it, on the `implement-loop/*` record branch whose log `sha:` is an ancestor of HEAD); a linked issue; the PR description(s); the commit messages; failing all, one question to the user — "what was this change meant to do?" Never guess it.
+The gate judges the code against what it was meant to do. Take the first found: a `deliverable` brief (`.deliverable/brief.md`, or once the loop has removed it, `git show "$(git log -1 --format=%H --diff-filter=D -- .deliverable/brief.md)^:.deliverable/brief.md"`); a linked issue; the PR description(s); the commit messages; failing all, one question to the user — "what was this change meant to do?" Never guess it.
 
 ## 3. Agents
 

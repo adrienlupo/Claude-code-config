@@ -46,8 +46,7 @@ Opus 5.5 at `xhigh` scores ~1.4 points above `high` for 2.5× the cost. Effort i
 - **Builders climb `opus/low` → `opus/high` → `opus/xhigh`**, one rung per failed attempt; failing at the top is the plateau. Start higher only when the task says why, and log the why. It is the cheapest measured policy on checkable work, and it needs a check that fails bad work.
 - **Judges are `opus`** — the docs' default for agent work is Opus 5.5 at `medium`. A false pass is a loop's costliest error, so the gate gets the top rung.
 - **Captures are `haiku`**: run a command, the suite or a replay script (browser included), hand back the artifact. Keep Haiku's input small.
-- **Script-writing captures are `sonnet/medium`**: the first replay script of a browser definition, or the rewrite of one that no longer reaches its state. An MCP drive, or a capture that failed once, goes to `opus/low`.
-- **Sonnet writes replay scripts and nothing else**: everywhere else `opus/low` beats it on score at a seventh of the cost per solved task.
+- **Sonnet is not a worker**: `opus/low` beats it on score at a seventh of the cost per solved task.
 - **Fable is not a worker, and `run()` refuses it**: Opus 5.5 matched it at a fifth of the cost. The docs' one case for Fable — Opus 5.5 at higher effort still falls short — is a plateau, and plateaus go back to the user.
 - **`max` is not a rung, and `run()` refuses it**: it "may show diminishing returns and is prone to overthinking".
 
@@ -68,7 +67,7 @@ Opus 5.5 at `xhigh` scores ~1.4 points above `high` for 2.5× the cost. Effort i
 
 ## Check
 
-`implement-loop` runs both around every workflow, because a guard the orchestrator pastes is one it can edit; `deep-review` runs neither.
+Run both around every workflow of an unattended run, because a guard the orchestrator pastes is one it can edit; `deep-review` runs neither.
 
 - **Before**: `python3 ~/.claude/skills/ventilate/scripts/preflight.py <file>`, then launch the file by `scriptPath` — never inline, whatever the Workflow tool's guidance says, or the preflight never sees it. Exit 2: `GUARD` or `run()` differs from the block above, the code names `agent` outside `run()`, or it nests a `workflow()`. Fix the script; nothing has run.
 - **After**: `python3 ~/.claude/skills/ventilate/scripts/ventilation.py --check --since <the run's start stamp>`. Exit 2: an agent **outside `run()`** (an Agent-tool subagent, or a workflow agent without `run()`'s label), a **label≠ran**, or any **Fable** agent, at any depth. Exit 1: nothing to check — no session, or dispatches without an agent transcript, as in a teleported session. Any non-zero stops the run: the next workflow would cost the same, and a proof written only at hand-off says nothing about a run killed for cost.
@@ -78,8 +77,7 @@ Opus 5.5 at `xhigh` scores ~1.4 points above `high` for 2.5× the cost. Effort i
 Before a run's log is frozen, append what actually ran — from the repo toplevel, to whichever log this run writes:
 
 ```sh
-python3 ~/.claude/skills/ventilate/scripts/ventilation.py >> "$(git rev-parse --absolute-git-dir)/implement-loop.log"
 python3 ~/.claude/skills/ventilate/scripts/ventilation.py >> "$(git rev-parse --git-common-dir)/deep-review.log"
 ```
 
-It finds the session by `$CLAUDE_CODE_SESSION_ID`, not the cwd; counts every subagent transcript of the session, workflow agents included, by the model and effort it recorded; and lists the check's findings by id, for the run's report to name. Agents from outside the run, like `deliverable`'s Fable reviewer, stay in: say what they were, never filter them out. A run resumed in a new session takes one `--session <id>` per session.
+It finds the session by `$CLAUDE_CODE_SESSION_ID`, not the cwd; counts every subagent transcript of the session, workflow agents included, by the model and effort it recorded; and lists the check's findings by id, for the run's report to name. Agents from outside the run, like a reviewer spawned before it, stay in: say what they were, never filter them out. A run resumed in a new session takes one `--session <id>` per session.

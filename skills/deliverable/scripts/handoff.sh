@@ -14,8 +14,6 @@ DEFAULT=$(git symbolic-ref --short -q refs/remotes/origin/HEAD | sed 's|^origin/
 [ -n "$DEFAULT" ] || { echo "STOP: cannot tell the default branch — run: git remote set-head origin --auto"; exit 1; }
 # the loop removes the brief in its hand-off commit; on the default branch that removal would show up in every PR
 [ "$BRANCH" != "$DEFAULT" ] || { echo "STOP: on the default branch ($DEFAULT) — create the brief's branch first"; exit 1; }
-# the loop reads a brief stamped with another branch as stale
-grep -m1 . .deliverable/brief.md | grep -qF -- "$BRANCH" || { echo "STOP: the stamp line does not name $BRANCH"; exit 1; }
 
 FILES=$(find .deliverable -type f ! -name .DS_Store | sort)
 # `git add .deliverable` silently skips any file a rule like `*.sql` covers, and the loop runs without its fixture
