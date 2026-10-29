@@ -26,6 +26,8 @@ Turn every check into something that runs without a human: a test in the repo's 
 
 Build until every check passes, with the repo's own tests, typecheck and lint green. Commit each time a definition goes green, naming it (`D2: …`). A check stays as strict as its definition: when one fails, fix the code. Hand a subagent only a substantial, standalone part.
 
+When several definitions are independent — separate parts of the code — and each is a substantial job, build them in parallel in a workflow, one builder per definition, through `ventilate`'s `run()` and both its checks; a check that stops the run sends you straight to §5. A builder gets its definition and check verbatim, the out-of-scope wall and, on a retry, the verifier's words, and leaves committing to you: once the workflow returns, commit each definition that went green.
+
 ## 4. Verify
 
 Spawn one fresh agent (`model: "opus"`) that has seen none of the work. Give it the brief, `assets/` and how to reach the running output, and ask it to refute each definition against the real output — the page, the endpoint, the command's result — never the diff. It may run your checks, but it judges by the brief's words. Design, copy and feel it judges blind: the build's output and the reference, unlabelled, against the bar. It returns, per definition, pass or fail with its evidence: the command and its output, or a screenshot path.
@@ -38,4 +40,4 @@ Hand off early, as it stands, when a definition fails the same way three attempt
 
 Stop any server you started. Run `git rm -rq --ignore-unmatch .deliverable && rm -rf .deliverable` (an empty `assets/` stays behind otherwise), commit with the goal as subject and one line per definition — met, or its gap — and `git push -u origin HEAD`. A rejected push means the branch moved: tell the user, whose commits those are.
 
-Report for someone who never saw the run: each definition met or not, with the verifier's evidence; the branch and commit; and when unfinished, their calls — adjust a definition, widen the scope, run longer, or take it as it stands. Open no PR: that's `stack-this` or `pr`.
+Report for someone who never saw the run: each definition met or not, with the verifier's evidence; the branch and commit; after a workflow, `ventilate`'s `ventilation:` line; and when unfinished, their calls — adjust a definition, widen the scope, run longer, or take it as it stands. Open no PR: that's `stack-this` or `pr`.
