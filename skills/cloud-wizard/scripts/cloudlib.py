@@ -176,10 +176,14 @@ def actual(project):
                 name = e.name
             if (kind, name) not in copied:
                 lines.add(f"{kind} {name}")
-    # an MCP server counts when it connects here, not because .mcp.json names it
-    health = subprocess.run(["claude", "mcp", "list"], capture_output=True, text=True, cwd=project, timeout=180).stdout
+    # an MCP server counts when it connects here, not because .mcp.json names it. The session
+    # loads .mcp.json without asking, but a separate `claude mcp list` in the untrusted clone
+    # leaves it "Pending approval" unconnected: --settings approves them for this check only.
+    servers = list(load_json(Path(project) / ".mcp.json", {}).get("mcpServers", {}))
+    approve = json.dumps({"enabledMcpjsonServers": servers})
+    health = subprocess.run(["claude", "--settings", approve, "mcp", "list"], capture_output=True, text=True, cwd=project, timeout=180).stdout
     connected = {m.group(1) for m in re.finditer(r"^(.+?): .* - ✔ Connected", health, re.M)}
-    lines.update(f"mcp {s}" for s in load_json(Path(project) / ".mcp.json", {}).get("mcpServers", {}) if s in connected)
+    lines.update(f"mcp {s}" for s in servers if s in connected)
     chromium = subprocess.run(["/usr/local/bin/chromium", "--version"], capture_output=True)
     if chromium.returncode == 0:
         lines.add("chromium")
