@@ -127,7 +127,7 @@
       "~/.claude/"
     ]
   },
-  "model": "opus[1m]",
+  "model": "opus",
   "skillOverrides": {
     "seo-audit": "off",
     "ci-cd-automation": "off",

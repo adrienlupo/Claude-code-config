@@ -1,13 +1,6 @@
 ---
 name: turnstile-spin
-description: Set up Cloudflare Turnstile end-to-end in a project. Scan the codebase, create the widget via the Cloudflare API, embed it where user requests need bot verification (form submissions, SPA actions, API endpoints, download links, comment or vote submissions, etc.), wire canonical server-side siteverify in the customer's existing backend, validate, and persist the skill. Load this when a user asks to add Turnstile, set up CAPTCHA, protect a form or endpoint from bots, or fix a Turnstile integration. Mirrors developers.cloudflare.com/turnstile/spin.
-references:
-  - vanilla-html
-  - nextjs-app
-  - nextjs-pages
-  - astro
-  - sveltekit
-  - hugo
+description: Set up, repair, or migrate to Cloudflare Turnstile bot verification in an existing frontend and backend, including server-side Siteverify.
 ---
 
 # Turnstile Spin skill
@@ -16,7 +9,20 @@ Turns the prompt "set up Turnstile" into a working end-to-end integration: a wid
 
 You are the agent. Run the wizard below by invoking the scripts under `scripts/` and branching on their JSON output. The scripts hold the deterministic logic (API calls, retry/error handling); your job is orchestration, codebase reading, confirmation, and the frontend + backend edits.
 
-This file is the canonical machine-readable behavior. Product requirements come from the [Turnstile documentation](https://developers.cloudflare.com/turnstile/), and the hosted prompt must mirror this behavior.
+This file is the canonical machine-readable behavior. Product requirements come from the [Turnstile documentation](https://developers.cloudflare.com/turnstile/index.md), and the hosted prompt must mirror this behavior.
+
+## Framework references
+
+Read the reference for the existing frontend when wiring the integration:
+
+| Frontend | Reference |
+|---|---|
+| Vanilla HTML | [vanilla-html](references/vanilla-html.md) |
+| Next.js App Router | [nextjs-app](references/nextjs-app.md) |
+| Next.js Pages Router | [nextjs-pages](references/nextjs-pages.md) |
+| Astro | [astro](references/astro.md) |
+| SvelteKit | [sveltekit](references/sveltekit.md) |
+| Hugo | [hugo](references/hugo.md) |
 
 ## When to load this skill
 
@@ -313,7 +319,7 @@ Substitution:
 
 Edge cases to surface to the user:
 - **reCAPTCHA v3 score thresholds.** Turnstile has no score. Tell the user explicitly that migrated code will reject on `success === false`.
-- **reCAPTCHA Enterprise.** Don't auto-migrate. Point at [developers.cloudflare.com/turnstile/migration/recaptcha/](https://developers.cloudflare.com/turnstile/migration/recaptcha/).
+- **reCAPTCHA Enterprise.** Don't auto-migrate. Point at [developers.cloudflare.com/turnstile/migration/recaptcha/](https://developers.cloudflare.com/turnstile/migration/recaptcha/index.md).
 - **Custom `action=` values.** Preserve any valid custom action the user passed to `grecaptcha.execute` as `data-action` on the widget. Otherwise, use the stable action assigned in Step 7. In both cases, validate the returned action in the backend.
 
 ## Edge cases
@@ -322,7 +328,7 @@ Edge cases to surface to the user:
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Account enumeration is unavailable             | Ask the user for the account ID and export `CLOUDFLARE_ACCOUNT_ID`, or obtain approval for canonical absolute `WRANGLER_BIN` and exact `WRANGLER_VERSION`. Do not install or run a project-local Wrangler. |
 | Multiple Cloudflare accounts                   | `scripts/auth-probe.sh` returns all accounts; ask the user to choose, export `CLOUDFLARE_ACCOUNT_ID`                                                                                                                                  |
-| Cloudflare Pages project                       | Wire siteverify inside a Pages Function (or the equivalent for your framework). The Pages Plugin at [developers.cloudflare.com/pages/functions/plugins/turnstile](https://developers.cloudflare.com/pages/functions/plugins/turnstile/) is a shortcut. |
+| Cloudflare Pages project                       | Wire siteverify inside a Pages Function (or the equivalent for your framework). The Pages Plugin at [developers.cloudflare.com/pages/functions/plugins/turnstile](https://developers.cloudflare.com/pages/functions/plugins/turnstile/index.md) is a shortcut. |
 | Cloudflare Workers backend                     | Use the canonical fetch idiom from Step 9 inside the Worker's request handler. `fetch` to `challenges.cloudflare.com` works the same way it does in Node.                                                                             |
 | `EXPECTED_HOSTNAME` mismatch                   | Update widget domains via PUT, not PATCH (PATCH returns `10405 Method not allowed`): `curl -X PUT .../widgets/$SITEKEY -d '{"name":"...","mode":"managed","domains":[...]}'`                                                          |
 | Token expired mid-flow                         | Stop, re-run `scripts/auth-probe.sh`, prompt for fresh credentials                                                                                                                                                                    |
